@@ -97,12 +97,20 @@ export default function ConfiguracoesView({
         })
       });
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Erro desconhecido na integração');
+      const responseText = await response.text();
+      let resData: any;
+      
+      try {
+        resData = JSON.parse(responseText);
+      } catch (parseErr) {
+        console.error('Erro ao parsear resposta do servidor:', responseText);
+        throw new Error(`Resposta do servidor não é um JSON válido. Status: ${response.status}. Corpo: ${responseText.substring(0, 100)}`);
       }
 
-      const resData = await response.json();
+      if (!response.ok) {
+        throw new Error(resData.error || resData.message || 'Erro na integração com Asaas');
+      }
+
       if (resData.success && resData.activeSubscription) {
         setActiveSubscription(resData.activeSubscription);
         alert('Assinatura gerada com sucesso! Efetue o pagamento do primeiro ciclo para ativar.');

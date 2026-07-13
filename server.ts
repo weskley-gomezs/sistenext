@@ -41,6 +41,12 @@ async function startServer() {
     return new GoogleGenAI({ apiKey });
   };
 
+  // Debug: Log environment variables presence (not values)
+  console.log("[Server Init] Environment Check:");
+  console.log(`- ASAAS_API_KEY: ${process.env.ASAAS_API_KEY ? "CONFIGURADO" : "AUSENTE"}`);
+  console.log(`- ASAAS_API_URL: ${process.env.ASAAS_API_URL ? "CONFIGURADO" : "AUSENTE"}`);
+  console.log(`- GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? "CONFIGURADO" : "AUSENTE"}`);
+
   // API Route for Gemini AI Operations
   app.post("/api/chat-gemini", async (req, res) => {
     try {
@@ -74,12 +80,23 @@ async function startServer() {
   async function asaasRequest(method: string, path: string, body?: any) {
     const apiKey = process.env.ASAAS_API_KEY;
     if (!apiKey) {
+      console.error("[Asaas Request] ERRO: ASAAS_API_KEY não configurada.");
       throw new Error("Chave da API do Asaas (ASAAS_API_KEY) não configurada.");
     }
 
-    // Determine base URL: production vs sandbox
-    const isProd = !apiKey.includes("test") && process.env.ASAAS_SANDBOX !== "true";
-    const baseUrl = isProd ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/v3";
+    // Determine base URL: environment variable > production vs sandbox logic
+    const envUrl = process.env.ASAAS_API_URL;
+    let baseUrl = "";
+    
+    if (envUrl) {
+      baseUrl = envUrl.endsWith("/") ? envUrl.slice(0, -1) : envUrl;
+      // If the user provided a URL without /v3, we should probably warn or handle it, 
+      // but usually the user knows what they are doing if they set ASAAS_API_URL.
+    } else {
+      const isProd = !apiKey.includes("test") && process.env.ASAAS_SANDBOX !== "true";
+      baseUrl = isProd ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/v3";
+    }
+    
     const url = `${baseUrl}${path}`;
 
     const headers: Record<string, string> = {
@@ -87,40 +104,81 @@ async function startServer() {
       "access_token": apiKey,
     };
 
+    console.log(`\n--- [Asaas API Request] ---`);
+    console.log(`URL: ${url}`);
+    console.log(`Method: ${method}`);
+    console.log(`Headers: { "Content-Type": "application/json", "access_token": "***" }`);
+    if (body) {
+      console.log(`Body Sent: ${JSON.stringify(body, null, 2)}`);
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+
     const options: RequestInit = {
       method,
       headers,
+      signal: controller.signal,
     };
 
     if (body) {
       options.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, options);
-    if (!response.ok) {
-      const errorText = await response.text();
-      let parsedError: any;
-      try {
-        parsedError = JSON.parse(errorText);
-      } catch {
-        parsedError = { errors: [{ description: errorText }] };
-      }
-      const description = parsedError?.errors?.[0]?.description || parsedError?.errors?.[0]?.message || "Erro desconhecido na API do Asaas";
-      throw new Error(description);
-    }
+    try {
+      const response = await fetch(url, options);
+      clearTimeout(timeoutId);
+      console.log(`Status HTTP: ${response.status} ${response.statusText}`);
 
-    return response.json();
+      const responseText = await response.text();
+      console.log(`Corpo Recebido (Raw): ${responseText.substring(0, 1000)}${responseText.length > 1000 ? "..." : ""}`);
+
+      if (!response.ok) {
+        let parsedError: any;
+        try {
+          parsedError = JSON.parse(responseText);
+        } catch {
+          // Se não for JSON, pode ser um HTML de erro (404, 502, etc)
+          if (responseText.includes("<html") || responseText.includes("<!DOCTYPE")) {
+            console.error("[Asaas API Request] Erro: Resposta da Asaas é um HTML (provável erro de rota ou proxy na Asaas)");
+          }
+          parsedError = { errors: [{ description: responseText }] };
+        }
+        
+        const description = parsedError?.errors?.[0]?.description || 
+                           parsedError?.errors?.[0]?.message || 
+                           parsedError?.message ||
+                           "Erro desconhecido na API do Asaas";
+        
+        throw new Error(description);
+      }
+
+      try {
+        return JSON.parse(responseText);
+      } catch (e) {
+        console.error("[Asaas API Request] Erro ao parsear JSON de resposta bem-sucedida:", e);
+        throw new Error("Resposta da Asaas não é um JSON válido: " + responseText.substring(0, 100));
+      }
+    } catch (error: any) {
+      console.error(`[Asaas API Request] Erro na requisição: ${error.message}`);
+      throw error;
+    }
   }
 
   // Route to create a subscription (R$ 29,90)
   app.post("/api/asaas/assinar", async (req, res) => {
+    console.log(`[Asaas Sub API] Recebida requisição POST em /api/asaas/assinar`);
     try {
       const { clientName, email, phone, cnpjCpf, paymentMethod, ownerId } = req.body;
+      console.log(`[Asaas Sub API] Dados recebidos:`, { clientName, email, paymentMethod, ownerId });
+      
       if (!ownerId) {
+        console.error("[Asaas Sub API] Erro: ownerId ausente");
         res.status(400).json({ error: "ownerId é obrigatório" });
         return;
       }
       if (!clientName || !email) {
+        console.error("[Asaas Sub API] Erro: Nome ou E-mail ausente");
         res.status(400).json({ error: "Nome e E-mail são obrigatórios" });
         return;
       }
@@ -500,6 +558,15 @@ async function startServer() {
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });
+  });
+  
+  // Catch-all for unknown API routes to debug 404s
+  app.all("/api/*", (req, res) => {
+    console.warn(`[404 API] Rota não encontrada: ${req.method} ${req.url}`);
+    res.status(404).json({ 
+      error: `Rota API não encontrada: ${req.method} ${req.url}`,
+      message: "The page could not be found (API Fallback)"
+    });
   });
 
   // Serve static assets/dev server depending on environment
