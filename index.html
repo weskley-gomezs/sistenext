@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="https://i.imgur.com/BewcRiJ.png" />
+    <title>SisteNext</title>
+    <script>
+      // Suppress benign Vite WebSocket errors that can cause unhandled rejections in sandboxed environments
+      window.addEventListener('unhandledrejection', (event) => {
+        if (event.reason && (
+          event.reason.message === 'WebSocket closed without opened.' || 
+          (typeof event.reason.message === 'string' && event.reason.message.includes('[vite] failed to connect to websocket'))
+        )) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

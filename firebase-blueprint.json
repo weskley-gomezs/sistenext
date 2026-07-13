@@ -1,0 +1,311 @@
+{
+  "entities": {
+    "Lead": {
+      "title": "Lead",
+      "description": "Representative or company in the sales pipeline",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "company": { "type": "string" },
+        "representative": { "type": "string" },
+        "phone": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "email": { "type": "string" },
+        "instagram": { "type": "string" },
+        "linkedin": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "site": { "type": "string" },
+        "segment": { "type": "string" },
+        "employeeCount": { "type": "integer" },
+        "estimatedRevenue": { "type": "number" },
+        "source": { "type": "string" },
+        "entryDate": { "type": "string" },
+        "notes": { "type": "string" },
+        "status": { "type": "string" },
+        "temperature": { "type": "string" },
+        "tags": { "type": "array" },
+        "estimatedValue": { "type": "number" },
+        "winProbability": { "type": "integer" }
+      },
+      "required": ["name", "company", "status"]
+    },
+    "Empresa": {
+      "title": "Empresa",
+      "description": "Registered organizations and partner companies",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "cnpj": { "type": "string" },
+        "companyName": { "type": "string" },
+        "tradingName": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "cep": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "site": { "type": "string" },
+        "representative": { "type": "string" },
+        "segment": { "type": "string" },
+        "employeeCount": { "type": "integer" },
+        "notes": { "type": "string" }
+      },
+      "required": ["companyName", "tradingName"]
+    },
+    "Cliente": {
+      "title": "Cliente",
+      "description": "Active customers of the CRM system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "leadId": { "type": "string" },
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "companyName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "companyName", "status"]
+    },
+    "Projeto": {
+      "title": "Projeto",
+      "description": "Active development projects and contracts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "scope": { "type": "string" },
+        "value": { "type": "number" },
+        "status": { "type": "string" },
+        "deadline": { "type": "string" },
+        "startDate": { "type": "string" },
+        "estimatedDelivery": { "type": "string" },
+        "actualDelivery": { "type": "string" },
+        "owner": { "type": "string" },
+        "checklist": { "type": "array" },
+        "files": { "type": "array" }
+      },
+      "required": ["clientId", "clientName", "name", "value", "status"]
+    },
+    "Proposta": {
+      "title": "Proposta",
+      "description": "Sales proposals offered to clients",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "value": { "type": "number" },
+        "validity": { "type": "string" },
+        "description": { "type": "string" },
+        "services": { "type": "array" },
+        "discount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["number", "clientId", "clientName", "value", "status"]
+    },
+    "Contrato": {
+      "title": "Contrato",
+      "description": "Signed business contracts with clients",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "title": { "type": "string" },
+        "value": { "type": "number" },
+        "status": { "type": "string" },
+        "date": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" }
+      },
+      "required": ["clientId", "clientName", "title", "value", "status", "date"]
+    },
+    "Financeiro": {
+      "title": "Financeiro",
+      "description": "Financial ledger of receivables and payables",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string" },
+        "category": { "type": "string" },
+        "value": { "type": "number" },
+        "status": { "type": "string" },
+        "date": { "type": "string" },
+        "clientName": { "type": "string" },
+        "projectName": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "paymentDate": { "type": "string" },
+        "asaasId": { "type": "string" },
+        "asaasPaymentUrl": { "type": "string" },
+        "asaasPixQrCode": { "type": "string" },
+        "asaasPixCopyPaste": { "type": "string" },
+        "asaasBoletoBarCode": { "type": "string" },
+        "asaasBoletoIdentificationField": { "type": "string" }
+      },
+      "required": ["description", "type", "category", "value", "status", "date"]
+    },
+    "EventAgenda": {
+      "title": "EventAgenda",
+      "description": "Scheduled events, meetings, and calls",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "description": { "type": "string" },
+        "linkedId": { "type": "string" },
+        "linkedName": { "type": "string" },
+        "linkedType": { "type": "string" }
+      },
+      "required": ["title", "type", "date", "time"]
+    },
+    "FollowUp": {
+      "title": "FollowUp",
+      "description": "Interactions timeline for tracking sales engagement",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "leadId": { "type": "string" },
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "user": { "type": "string" },
+        "nextAction": { "type": "string" },
+        "nextActionDate": { "type": "string" }
+      },
+      "required": ["leadId", "type", "description", "date", "time", "user"]
+    },
+    "Anotacao": {
+      "title": "Anotacao",
+      "description": "General text annotations for tracking information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "entityId": { "type": "string" },
+        "entityName": { "type": "string" },
+        "entityType": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "user": { "type": "string" }
+      },
+      "required": ["title", "content", "createdAt", "user"]
+    },
+    "Documento": {
+      "title": "Documento",
+      "description": "Uploaded or generated client files",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "size": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["name", "type", "fileUrl", "uploadedAt"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "Audit and activity logs of operations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "operation": { "type": "string" },
+        "collection": { "type": "string" },
+        "recordId": { "type": "string" },
+        "justification": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "user": { "type": "string" }
+      },
+      "required": ["id", "operation", "collection", "recordId", "justification", "timestamp", "user"]
+    },
+    "MembroEquipe": {
+      "title": "MembroEquipe",
+      "description": "Team member profiles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" },
+        "commissionRate": { "type": "number" },
+        "salesGoal": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "status"]
+    }
+  },
+  "firestore": {
+    "leads": {
+      "schema": { "$ref": "#/entities/Lead" },
+      "description": "Collection of business leads"
+    },
+    "empresas": {
+      "schema": { "$ref": "#/entities/Empresa" },
+      "description": "Collection of corporate entities"
+    },
+    "clientes": {
+      "schema": { "$ref": "#/entities/Cliente" },
+      "description": "Collection of converted active customers"
+    },
+    "projetos": {
+      "schema": { "$ref": "#/entities/Projeto" },
+      "description": "Collection of active projects"
+    },
+    "propostas": {
+      "schema": { "$ref": "#/entities/Proposta" },
+      "description": "Collection of formal business proposals"
+    },
+    "contratos": {
+      "schema": { "$ref": "#/entities/Contrato" },
+      "description": "Collection of customer contracts"
+    },
+    "financeiro": {
+      "schema": { "$ref": "#/entities/Financeiro" },
+      "description": "Collection of financial transaction records"
+    },
+    "agenda": {
+      "schema": { "$ref": "#/entities/EventAgenda" },
+      "description": "Collection of scheduled agenda events"
+    },
+    "follow_ups": {
+      "schema": { "$ref": "#/entities/FollowUp" },
+      "description": "Collection of interaction log records for leads"
+    },
+    "anotacoes": {
+      "schema": { "$ref": "#/entities/Anotacao" },
+      "description": "Collection of business and project notes"
+    },
+    "documentos": {
+      "schema": { "$ref": "#/entities/Documento" },
+      "description": "Collection of uploaded client files"
+    },
+    "logs": {
+      "schema": { "$ref": "#/entities/Log" },
+      "description": "Collection of deletion and audit logs"
+    },
+    "equipe": {
+      "schema": { "$ref": "#/entities/MembroEquipe" },
+      "description": "Collection of team members"
+    }
+  }
+}

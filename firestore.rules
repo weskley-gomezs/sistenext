@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAuthorized(ownerId) {
+      let profilePath = /databases/$(database)/documents/user_profiles/$(request.auth.uid);
+      return ownerId == null || 
+             request.auth.uid == ownerId || 
+             (exists(profilePath) && get(profilePath).data.ownerId == ownerId);
+    }
+
+    // User Profiles: Users can read/write their own profile
+    match /user_profiles/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Equipe: Special rule for member lookup by email (used in login/signup)
+    match /equipe/{id} {
+      allow read: if true; // Allow lookup for login
+      allow write: if isAuthenticated() && isAuthorized(request.resource.data.ownerId);
+    }
+
+    // Application Collections: Restricted by ownerId
+    match /{collection}/{id} {
+      allow read: if isAuthenticated() && 
+                  collection != 'user_profiles' && 
+                  collection != 'equipe' && (
+                    resource == null || 
+                    isAuthorized(resource.data.ownerId)
+                  );
+      allow write: if isAuthenticated() && 
+                   collection != 'user_profiles' && 
+                   collection != 'equipe' && (
+                     (resource == null || isAuthorized(resource.data.ownerId)) &&
+                     (request.resource == null || isAuthorized(request.resource.data.ownerId))
+                   );
+    }
+  }
+}

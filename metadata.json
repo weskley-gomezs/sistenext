@@ -1,0 +1,6 @@
+{
+  "name": "SisteNext",
+  "description": "Sistema completo e premium de CRM com IA integrada para empresas de tecnologia, software, automações e agentes inteligentes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
