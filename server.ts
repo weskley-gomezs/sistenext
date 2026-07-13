@@ -171,18 +171,37 @@ app.post("/api/webhook/asaas", async (req, res) => {
 
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
-// Static / Vite
-if (process.env.NODE_ENV !== "production") {
-  const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
-  app.use(vite.middlewares);
-} else {
-  const dist = path.join(process.cwd(), "dist");
-  app.use(express.static(dist));
-  app.get("*", (req, res) => res.sendFile(path.join(dist, "index.html")));
+// Static / Vite Setup
+async function bootstrap() {
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.error("[Vite Init Error]:", e);
+    }
+  } else {
+    const dist = path.join(process.cwd(), "dist");
+    if (fs.existsSync(dist)) {
+      app.use(express.static(dist));
+      app.get("*", (req, res) => res.sendFile(path.join(dist, "index.html")));
+    }
+  }
+
+  // Only start listening if NOT in a serverless environment (like Vercel)
+  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
-if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
-  app.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
-}
+bootstrap().catch(err => {
+  console.error("[Bootstrap Error]:", err);
+});
 
 export default app;
