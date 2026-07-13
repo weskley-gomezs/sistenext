@@ -53,7 +53,130 @@ export default function ConfiguracoesView({
     NotificationService.permission
   );
 
-  // Subscription / Asaas integration removed as requested by the user
+  const [activeSubscription, setActiveSubscription] = useState<any>(null);
+  const [subName, setSubName] = useState('');
+  const [subEmail, setSubEmail] = useState('');
+  const [subPhone, setSubPhone] = useState('');
+  const [subCnpjCpf, setSubCnpjCpf] = useState('');
+  const [subPaymentMethod, setSubPaymentMethod] = useState<'Pix' | 'Boleto' | 'Crédito'>('Pix');
+  const [subscribing, setSubscribing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [syncingSub, setSyncingSub] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(true);
+    setTimeout(() => setCopiedText(false), 2000);
+  };
+
+  useEffect(() => {
+    if (formData.companyName) setSubName(formData.companyName);
+    if (formData.supportEmail) setSubEmail(formData.supportEmail);
+    if (formData.phone) setSubPhone(formData.phone);
+    if (formData.cnpj) setSubCnpjCpf(formData.cnpj);
+  }, [formData]);
+
+  const handleCreateSubscription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ownerId) return;
+    setSubscribing(true);
+    try {
+      const response = await fetch('/api/asaas/assinar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          clientName: subName,
+          email: subEmail,
+          phone: subPhone,
+          cnpjCpf: subCnpjCpf,
+          paymentMethod: subPaymentMethod,
+          ownerId
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Erro desconhecido na integração');
+      }
+
+      const resData = await response.json();
+      if (resData.success && resData.activeSubscription) {
+        setActiveSubscription(resData.activeSubscription);
+        alert('Assinatura gerada com sucesso! Efetue o pagamento do primeiro ciclo para ativar.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erro ao criar assinatura: ${err.message}`);
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!activeSubscription || !activeSubscription.subscriptionId || !ownerId) return;
+    if (!window.confirm('Tem certeza de que deseja cancelar sua assinatura mensal de R$ 29,90? O acesso a alguns recursos poderá ser suspenso.')) {
+      return;
+    }
+    setCancelling(true);
+    try {
+      const response = await fetch('/api/asaas/cancelar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          subscriptionId: activeSubscription.subscriptionId,
+          ownerId
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Falha ao cancelar no Asaas');
+      }
+
+      setActiveSubscription(prev => prev ? { ...prev, status: 'CANCELLED' } : null);
+      alert('Assinatura cancelada com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erro ao cancelar assinatura: ${err.message}`);
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleSyncSubscriptionStatus = async () => {
+    if (!activeSubscription || !activeSubscription.paymentId || !ownerId) return;
+    setSyncingSub(true);
+    try {
+      const response = await fetch(`/api/asaas/status/${activeSubscription.paymentId}?ownerId=${ownerId}`);
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Falha ao sincronizar status');
+      }
+
+      const resData = await response.json();
+      if (resData.success) {
+        setActiveSubscription(prev => {
+          if (!prev) return null;
+          const updated = { ...prev, status: resData.status };
+          if (resData.paymentDate) {
+            updated.paymentDate = resData.paymentDate;
+          }
+          return updated;
+        });
+        alert(`Status sincronizado com sucesso! Novo status: ${resData.status}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erro ao sincronizar status: ${err.message}`);
+    } finally {
+      setSyncingSub(false);
+    }
+  };
 
   const handleRequestNotificationPermission = async () => {
     const permission = await NotificationService.requestPermission();
@@ -89,7 +212,11 @@ export default function ConfiguracoesView({
             generalGoal: Number(data.generalGoal || 0)
           };
           setFormData(configObj);
-          
+          if (data.activeSubscription) {
+            setActiveSubscription(data.activeSubscription);
+          } else {
+            setActiveSubscription(null);
+          }
         }
       } catch (error) {
         console.error('Erro ao carregar configurações:', error);
@@ -306,6 +433,199 @@ export default function ConfiguracoesView({
 
         {/* Administration/Backup (1 col) */}
         <div className="space-y-6">
+
+          {/* Assinatura do Sistema Asaas */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 p-5 rounded-2xl shadow-sm space-y-3.5">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <CreditCard size={14} className="text-indigo-500" /> Assinatura do Sistema
+            </h3>
+            
+            {activeSubscription && activeSubscription.status !== 'CANCELLED' ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Status da Assinatura</span>
+                    <span className={`inline-flex items-center gap-1 mt-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                      ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(activeSubscription.status)
+                        ? 'bg-emerald-500/10 text-emerald-500'
+                        : activeSubscription.status === 'OVERDUE'
+                        ? 'bg-red-500/10 text-red-500'
+                        : 'bg-amber-500/10 text-amber-500'
+                    }`}>
+                      {['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(activeSubscription.status) ? 'Ativo' : activeSubscription.status === 'OVERDUE' ? 'Atrasado' : 'Pendente'}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Valor Mensal</span>
+                    <span className="text-xs font-black font-mono text-slate-900 dark:text-white">R$ 29,90</span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+                  <p><strong className="text-slate-700 dark:text-slate-300">Cliente:</strong> {activeSubscription.customerName}</p>
+                  <p><strong className="text-slate-700 dark:text-slate-300">E-mail:</strong> {activeSubscription.customerEmail}</p>
+                  <p><strong className="text-slate-700 dark:text-slate-300">Próximo Vencimento:</strong> {activeSubscription.nextDueDate ? activeSubscription.nextDueDate.split('-').reverse().join('/') : 'N/A'}</p>
+                  <p><strong className="text-slate-700 dark:text-slate-300">Método:</strong> <span className="uppercase font-mono text-indigo-500">{activeSubscription.paymentMethod}</span></p>
+                </div>
+
+                {/* Payments Section (If not received yet) */}
+                {!['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(activeSubscription.status) && (
+                  <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-3">
+                    <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider text-center">Efetue o pagamento para liberar o acesso</p>
+                    
+                    {activeSubscription.billingType === 'PIX' && activeSubscription.pixQrCode && (
+                      <div className="space-y-2 flex flex-col items-center">
+                        <div className="p-2 bg-white rounded-lg border border-slate-100 max-w-[140px] mx-auto shadow-sm">
+                          <img
+                            src={`data:image/png;base64,${activeSubscription.pixQrCode}`}
+                            alt="QR Code Pix"
+                            className="w-full h-auto object-contain"
+                          />
+                        </div>
+                        <button
+                          onClick={() => copyToClipboard(activeSubscription.pixCopyPaste || '')}
+                          className="py-1 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] rounded-lg font-bold flex items-center gap-1.5 cursor-pointer mx-auto transition-all"
+                        >
+                          <Copy size={11} />
+                          <span>{copiedText ? 'Copiado!' : 'Copiar Chave Copie e Cole'}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {activeSubscription.billingType === 'BOLETO' && activeSubscription.identificationField && (
+                      <div className="space-y-1.5">
+                        <span className="block text-[8px] uppercase font-bold text-slate-400">Linha Digitável</span>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            readOnly
+                            value={activeSubscription.identificationField}
+                            className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-1.5 rounded-lg text-[9px] font-mono focus:outline-none"
+                          />
+                          <button
+                            onClick={() => copyToClipboard(activeSubscription.identificationField || '')}
+                            className="px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-bold flex items-center justify-center cursor-pointer transition-all"
+                          >
+                            <Copy size={11} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeSubscription.invoiceUrl && (
+                      <a
+                        href={activeSubscription.invoiceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-center flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[11px]"
+                      >
+                        <ExternalLink size={11} />
+                        <span>Abrir Link de Pagamento</span>
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={handleSyncSubscriptionStatus}
+                    disabled={syncingSub}
+                    className="py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[10px]"
+                  >
+                    <RefreshCw size={11} className={syncingSub ? 'animate-spin' : ''} />
+                    <span>Sincronizar</span>
+                  </button>
+                  <button
+                    onClick={handleCancelSubscription}
+                    disabled={cancelling}
+                    className="py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[10px]"
+                  >
+                    <span>Cancelar</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Formulário de Assinatura */
+              <form onSubmit={handleCreateSubscription} className="space-y-3">
+                <p className="text-[10px] text-slate-400">Inscreva-se no plano mensal por apenas <strong>R$ 29,90</strong> para liberar e manter todas as funcionalidades de gestão ativa.</p>
+                
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-500 mb-0.5">Nome Completo</label>
+                    <input
+                      type="text"
+                      required
+                      value={subName}
+                      onChange={(e) => setSubName(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-1.5 focus:outline-none text-[11px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-500 mb-0.5">E-mail</label>
+                    <input
+                      type="email"
+                      required
+                      value={subEmail}
+                      onChange={(e) => setSubEmail(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-1.5 focus:outline-none text-[11px]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold text-slate-500 mb-0.5">CPF / CNPJ</label>
+                      <input
+                        type="text"
+                        required
+                        value={subCnpjCpf}
+                        onChange={(e) => setSubCnpjCpf(e.target.value)}
+                        placeholder="Apenas números"
+                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-1.5 focus:outline-none text-[11px] font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold text-slate-500 mb-0.5">WhatsApp</label>
+                      <input
+                        type="text"
+                        value={subPhone}
+                        onChange={(e) => setSubPhone(e.target.value)}
+                        placeholder="(00) 00000-0000"
+                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-1.5 focus:outline-none text-[11px]"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-500 mb-1">Forma de Pagamento</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(['Pix', 'Boleto', 'Crédito'] as const).map((method) => (
+                        <button
+                          key={method}
+                          type="button"
+                          onClick={() => setSubPaymentMethod(method)}
+                          className={`py-1.5 border rounded-lg font-bold text-[10px] cursor-pointer transition-all text-center ${
+                            subPaymentMethod === method
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          {method}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={subscribing}
+                  className="w-full mt-2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <CreditCard size={13} />
+                  <span>{subscribing ? 'Processando...' : 'Assinar Plano (R$ 29,90 / mês)'}</span>
+                </button>
+              </form>
+            )}
+          </div>
 
           {/* Notificações do Navegador */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 p-5 rounded-2xl shadow-sm space-y-3.5">
