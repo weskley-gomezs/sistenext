@@ -369,6 +369,134 @@ async function startServer() {
     }
   });
 
+  // Webhook integration endpoint for Asaas (Express backend equivalent)
+  app.post("/api/webhook/asaas", async (req, res) => {
+    try {
+      const webhookToken = req.headers["asaas-access-token"];
+      const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
+
+      if (!expectedToken) {
+        console.error("[Asaas Webhook Server] Token de validação ASAAS_WEBHOOK_TOKEN não configurado nas variáveis de ambiente.");
+        res.status(500).json({ error: "Configuração do servidor pendente" });
+        return;
+      }
+
+      if (!webhookToken || webhookToken !== expectedToken) {
+        console.warn("[Asaas Webhook Server] Tentativa de acesso não autorizada. Token inválido.");
+        res.status(401).json({ error: "Não autorizado" });
+        return;
+      }
+
+      const { event, payment, subscription: subscriptionData } = req.body;
+      console.log(`[Asaas Webhook Server] Evento recebido: ${event}`);
+
+      if (!db) {
+        res.status(500).json({ error: "Banco de dados não disponível" });
+        return;
+      }
+
+      if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
+        const subscriptionId = payment?.subscription;
+        const paymentId = payment?.id;
+        const paymentStatus = payment?.status;
+        const paymentDate = payment?.paymentDate || new Date().toISOString().split("T")[0];
+
+        if (!subscriptionId) {
+          console.log("[Asaas Webhook Server] Pagamento sem assinatura associada, ignorando.");
+          res.json({ received: true });
+          return;
+        }
+
+        const q = query(collection(db, "configuracoes"), where("activeSubscription.subscriptionId", "==", subscriptionId));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+          console.warn(`[Asaas Webhook Server] Nenhuma configuração encontrada para a assinatura ${subscriptionId}`);
+          res.status(404).json({ error: "Assinatura não encontrada" });
+          return;
+        }
+
+        const docSnap = snapshot.docs[0];
+        const data = docSnap.data();
+        const activeSub = data.activeSubscription || {};
+
+        const updatedSubscription = {
+          ...activeSub,
+          status: paymentStatus,
+          paymentDate,
+          paymentId: paymentId || activeSub.paymentId,
+          updatedAt: new Date().toISOString()
+        };
+
+        await updateDoc(docSnap.ref, {
+          activeSubscription: updatedSubscription,
+          updatedAt: new Date().toISOString()
+        });
+
+        console.log(`[Asaas Webhook Server] Status atualizado no Firebase para o documento ${docSnap.id}`);
+      } 
+      else if (event === "PAYMENT_OVERDUE") {
+        const subscriptionId = payment?.subscription;
+
+        if (subscriptionId) {
+          const q = query(collection(db, "configuracoes"), where("activeSubscription.subscriptionId", "==", subscriptionId));
+          const snapshot = await getDocs(q);
+
+          if (!snapshot.empty) {
+            const docSnap = snapshot.docs[0];
+            const data = docSnap.data();
+            const activeSub = data.activeSubscription || {};
+
+            const updatedSubscription = {
+              ...activeSub,
+              status: "OVERDUE",
+              updatedAt: new Date().toISOString()
+            };
+
+            await updateDoc(docSnap.ref, {
+              activeSubscription: updatedSubscription,
+              updatedAt: new Date().toISOString()
+            });
+
+            console.log(`[Asaas Webhook Server] Assinatura ${subscriptionId} marcada como OVERDUE`);
+          }
+        }
+      } 
+      else if (event === "SUBSCRIPTION_DELETED") {
+        const subscriptionId = subscriptionData?.id;
+
+        if (subscriptionId) {
+          const q = query(collection(db, "configuracoes"), where("activeSubscription.subscriptionId", "==", subscriptionId));
+          const snapshot = await getDocs(q);
+
+          if (!snapshot.empty) {
+            const docSnap = snapshot.docs[0];
+            const data = docSnap.data();
+            const activeSub = data.activeSubscription || {};
+
+            const updatedSubscription = {
+              ...activeSub,
+              status: "CANCELLED",
+              updatedAt: new Date().toISOString()
+            };
+
+            await updateDoc(docSnap.ref, {
+              activeSubscription: updatedSubscription,
+              updatedAt: new Date().toISOString()
+            });
+
+            console.log(`[Asaas Webhook Server] Assinatura ${subscriptionId} marcada como CANCELLED`);
+          }
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error("[Asaas Webhook Server] Erro crítico:", error);
+      res.status(500).json({ error: error.message || "Erro interno ao processar webhook" });
+    }
+  });
+
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });

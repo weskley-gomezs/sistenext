@@ -461,13 +461,6 @@ export default function ConfiguracoesView({
                   </div>
                 </div>
 
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
-                  <p><strong className="text-slate-700 dark:text-slate-300">Cliente:</strong> {activeSubscription.customerName}</p>
-                  <p><strong className="text-slate-700 dark:text-slate-300">E-mail:</strong> {activeSubscription.customerEmail}</p>
-                  <p><strong className="text-slate-700 dark:text-slate-300">Próximo Vencimento:</strong> {activeSubscription.nextDueDate ? activeSubscription.nextDueDate.split('-').reverse().join('/') : 'N/A'}</p>
-                  <p><strong className="text-slate-700 dark:text-slate-300">Método:</strong> <span className="uppercase font-mono text-indigo-500">{activeSubscription.paymentMethod}</span></p>
-                </div>
-
                 {/* Payments Section (If not received yet) */}
                 {!['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(activeSubscription.status) && (
                   <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-3">
