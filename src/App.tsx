@@ -30,6 +30,7 @@ import {
 import Sidebar, { ActiveSection } from './components/Sidebar';
 import { NotificationManager } from './components/NotificationManager';
 import LoginView from './components/LoginView';
+import LandingPageView from './components/LandingPageView';
 import DashboardView from './components/DashboardView';
 import LeadsView from './components/LeadsView';
 import EmpresasView from './components/EmpresasView';
@@ -128,6 +129,7 @@ export default function App() {
   const [authChecking, setAuthChecking] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
   const [activeSection, setActiveSection] = useState<ActiveSection>('dashboard');
+  const [showLogin, setShowLogin] = useState(false);
 
   // CRM Global Realtime States
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -599,9 +601,20 @@ export default function App() {
     );
   }
 
-  // Not logged in -> Show Auth View
+  // Not logged in -> Show Auth View or Landing Page
   if (!user) {
-    return <LoginView onLoginSuccess={(u) => setUser(u)} />;
+    if (showLogin) {
+      return (
+        <LoginView 
+          onLoginSuccess={(u) => {
+            setUser(u);
+            setShowLogin(false);
+          }} 
+          onBackToLanding={() => setShowLogin(false)} 
+        />
+      );
+    }
+    return <LandingPageView onEnterCRM={() => setShowLogin(true)} />;
   }
 
   // Render correct Active Section View Component dynamically

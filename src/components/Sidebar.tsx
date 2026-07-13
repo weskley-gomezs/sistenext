@@ -136,12 +136,6 @@ export default function Sidebar({
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
-          >
-            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-          <button
             onClick={() => setMobileOpen(!mobileOpen)}
             className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
           >
@@ -319,18 +313,6 @@ export default function Sidebar({
 
         {/* Footer controls & Profile */}
         <div className="p-4 border-t border-slate-800 bg-slate-900/40">
-          {!isCollapsed && (
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs text-slate-500">Mudar Aparência</span>
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors flex items-center justify-center"
-              >
-                {darkMode ? <Sun size={15} /> : <Moon size={15} />}
-              </button>
-            </div>
-          )}
-
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner">
               {user?.email ? user.email[0].toUpperCase() : 'U'}

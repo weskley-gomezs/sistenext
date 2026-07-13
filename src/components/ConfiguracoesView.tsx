@@ -113,21 +113,22 @@ export default function ConfiguracoesView({
 
       if (resData.success && resData.activeSubscription) {
         setActiveSubscription(resData.activeSubscription);
-        alert('Assinatura gerada com sucesso! Efetue o pagamento do primeiro ciclo para ativar.');
+        NotificationService.send('Assinatura Gerada', { body: 'Assinatura criada com sucesso! Efetue o pagamento para ativar.' });
       }
     } catch (err: any) {
       console.error(err);
-      alert(`Erro ao criar assinatura: ${err.message}`);
+      NotificationService.send('Erro na Assinatura', { body: err.message });
     } finally {
       setSubscribing(false);
     }
   };
 
   const handleCancelSubscription = async () => {
-    if (!activeSubscription || !activeSubscription.subscriptionId || !ownerId) return;
-    if (!window.confirm('Tem certeza de que deseja cancelar sua assinatura mensal de R$ 29,90? O acesso a alguns recursos poderá ser suspenso.')) {
+    if (!activeSubscription || !activeSubscription.subscriptionId || !ownerId) {
+      console.warn('[Config] Cancelamento abortado: dados insuficientes', { activeSubscription, ownerId });
       return;
     }
+    
     setCancelling(true);
     try {
       const response = await fetch('/api/asaas/cancelar', {
@@ -147,17 +148,21 @@ export default function ConfiguracoesView({
       }
 
       setActiveSubscription(prev => prev ? { ...prev, status: 'CANCELLED' } : null);
-      alert('Assinatura cancelada com sucesso!');
+      NotificationService.send('Assinatura Cancelada', { body: 'Sua assinatura foi removida com sucesso.' });
     } catch (err: any) {
       console.error(err);
-      alert(`Erro ao cancelar assinatura: ${err.message}`);
+      // Fallback for visual feedback if alert is blocked
+      NotificationService.send('Erro no Cancelamento', { body: err.message });
     } finally {
       setCancelling(false);
     }
   };
 
   const handleSyncSubscriptionStatus = async () => {
-    if (!activeSubscription || !activeSubscription.paymentId || !ownerId) return;
+    if (!activeSubscription || !activeSubscription.paymentId || !ownerId) {
+      console.warn('[Config] Sincronização abortada: sem ID de pagamento', { activeSubscription });
+      return;
+    }
     setSyncingSub(true);
     try {
       const response = await fetch(`/api/asaas/status/${activeSubscription.paymentId}?ownerId=${ownerId}`);
@@ -176,11 +181,11 @@ export default function ConfiguracoesView({
           }
           return updated;
         });
-        alert(`Status sincronizado com sucesso! Novo status: ${resData.status}`);
+        NotificationService.send('Status Sincronizado', { body: `Novo status: ${resData.status}` });
       }
     } catch (err: any) {
       console.error(err);
-      alert(`Erro ao sincronizar status: ${err.message}`);
+      NotificationService.send('Erro na Sincronização', { body: err.message });
     } finally {
       setSyncingSub(false);
     }
@@ -245,7 +250,7 @@ export default function ConfiguracoesView({
       // Firestore has a 1MB limit per document. Base64 adds ~33% overhead.
       // 800KB is a safe limit to stay under 1MB total document size.
       if (file.size > 800 * 1024) {
-        alert('A logo deve ter no máximo 800KB para garantir a persistência no sistema.');
+        NotificationService.send('Arquivo Muito Grande', { body: 'A logo deve ter no máximo 800KB para persistência.' });
         return;
       }
 
@@ -263,15 +268,15 @@ export default function ConfiguracoesView({
     setSaving(true);
     try {
       await setAppConfig(ownerId, formData);
-      alert('Configurações salvas com sucesso!');
+      NotificationService.send('Configurações Salvas', { body: 'Suas alterações foram aplicadas com sucesso.' });
     } catch (error: any) {
       console.error('Erro ao salvar configurações:', error);
       if (error.code === 'permission-denied') {
-        alert('Erro: Permissão negada ao salvar no banco de dados.');
+        NotificationService.send('Acesso Negado', { body: 'Permissão negada ao salvar no banco de dados.' });
       } else if (formData.logoBase64 && formData.logoBase64.length > 1000000) {
-        alert('Erro: A imagem da logo é muito grande para o banco de dados. Tente uma imagem menor ou com mais compressão.');
+        NotificationService.send('Imagem Grande', { body: 'A logo é muito grande. Tente uma imagem menor.' });
       } else {
-        alert('Ocorreu um erro ao salvar as configurações. Tente novamente.');
+        NotificationService.send('Erro ao Salvar', { body: 'Ocorreu um erro. Tente novamente.' });
       }
     } finally {
       setSaving(false);
@@ -666,21 +671,6 @@ export default function ConfiguracoesView({
                 As notificações estão bloqueadas no seu navegador. Você precisará reativá-las nas configurações do site (ícone de cadeado na barra de endereços).
               </p>
             )}
-          </div>
-
-          {/* Theme customizer */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 p-5 rounded-2xl shadow-sm space-y-3.5">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Aparência do Sistema
-            </h3>
-            <p className="text-xs text-slate-400">Alternar tema visual padrão de visualização.</p>
-
-            <button
-              onClick={onToggleTheme}
-              className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2"
-            >
-              Tema Atual: <span className="uppercase text-indigo-600 dark:text-indigo-400">{currentTheme}</span>
-            </button>
           </div>
 
           {/* Backup Database */}
