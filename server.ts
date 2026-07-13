@@ -9,7 +9,10 @@ import fs from "fs";
 
 dotenv.config();
 
-// Read Firebase config safely from file system to avoid bundling or import path issues
+const app = express();
+app.use(express.json());
+
+// Firebase initialization
 const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
 let db: any = null;
 
@@ -22,573 +25,164 @@ if (fs.existsSync(firebaseConfigPath)) {
   } catch (err) {
     console.error("[Firebase Server Init Error]:", err);
   }
-} else {
-  console.warn("[Firebase Server] Warning: firebase-applet-config.json not found.");
 }
 
 const PORT = 3000;
 
-async function startServer() {
-  const app = express();
-  app.use(express.json());
+// Gemini AI Helper
+const getAiClient = () => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+  return new GoogleGenAI({ apiKey });
+};
 
-  // Safe lazy-initialization check for Gemini API key
-  const getAiClient = () => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not configured in the environment.");
-    }
-    return new GoogleGenAI({ apiKey });
+// Asaas API Helper
+async function asaasRequest(method: string, path: string, body?: any) {
+  const apiKey = process.env.ASAAS_API_KEY;
+  if (!apiKey) throw new Error("ASAAS_API_KEY is not configured.");
+
+  const envUrl = process.env.ASAAS_API_URL;
+  const baseUrl = envUrl 
+    ? (envUrl.endsWith("/") ? envUrl.slice(0, -1) : envUrl)
+    : (!apiKey.includes("test") && process.env.ASAAS_SANDBOX !== "true" 
+        ? "https://api.asaas.com/v3" 
+        : "https://sandbox.asaas.com/v3");
+
+  const url = `${baseUrl}${path}`;
+  const options: RequestInit = {
+    method,
+    headers: { "Content-Type": "application/json", "access_token": apiKey },
   };
-
-  // Debug: Log environment variables presence (not values)
-  console.log("[Server Init] Environment Check:");
-  console.log(`- ASAAS_API_KEY: ${process.env.ASAAS_API_KEY ? "CONFIGURADO" : "AUSENTE"}`);
-  console.log(`- ASAAS_API_URL: ${process.env.ASAAS_API_URL ? "CONFIGURADO" : "AUSENTE"}`);
-  console.log(`- GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? "CONFIGURADO" : "AUSENTE"}`);
-
-  // API Route for Gemini AI Operations
-  app.post("/api/chat-gemini", async (req, res) => {
-    try {
-      const { prompt, systemInstruction } = req.body;
-      if (!prompt) {
-        res.status(400).json({ error: "Prompt is required" });
-        return;
-      }
-
-      const ai = getAiClient();
-      
-      const config: any = {};
-      if (systemInstruction) {
-        config.systemInstruction = systemInstruction;
-      }
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: config
-      });
-
-      res.json({ text: response.text });
-    } catch (error: any) {
-      console.error("Gemini API Error:", error);
-      res.status(500).json({ error: error.message || "Internal AI Server Error" });
-    }
-  });
-
-  // Helper for making requests to the Asaas API
-  async function asaasRequest(method: string, path: string, body?: any) {
-    const apiKey = process.env.ASAAS_API_KEY;
-    if (!apiKey) {
-      console.error("[Asaas Request] ERRO: ASAAS_API_KEY não configurada.");
-      throw new Error("Chave da API do Asaas (ASAAS_API_KEY) não configurada.");
-    }
-
-    // Determine base URL: environment variable > production vs sandbox logic
-    const envUrl = process.env.ASAAS_API_URL;
-    let baseUrl = "";
-    
-    if (envUrl) {
-      baseUrl = envUrl.endsWith("/") ? envUrl.slice(0, -1) : envUrl;
-      // If the user provided a URL without /v3, we should probably warn or handle it, 
-      // but usually the user knows what they are doing if they set ASAAS_API_URL.
-    } else {
-      const isProd = !apiKey.includes("test") && process.env.ASAAS_SANDBOX !== "true";
-      baseUrl = isProd ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/v3";
-    }
-    
-    const url = `${baseUrl}${path}`;
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "access_token": apiKey,
-    };
-
-    console.log(`\n--- [Asaas API Request] ---`);
-    console.log(`URL: ${url}`);
-    console.log(`Method: ${method}`);
-    console.log(`Headers: { "Content-Type": "application/json", "access_token": "***" }`);
-    if (body) {
-      console.log(`Body Sent: ${JSON.stringify(body, null, 2)}`);
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
-
-    const options: RequestInit = {
-      method,
-      headers,
-      signal: controller.signal,
-    };
-
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-
-    try {
-      const response = await fetch(url, options);
-      clearTimeout(timeoutId);
-      console.log(`Status HTTP: ${response.status} ${response.statusText}`);
-
-      const responseText = await response.text();
-      console.log(`Corpo Recebido (Raw): ${responseText.substring(0, 1000)}${responseText.length > 1000 ? "..." : ""}`);
-
-      if (!response.ok) {
-        let parsedError: any;
-        try {
-          parsedError = JSON.parse(responseText);
-        } catch {
-          // Se não for JSON, pode ser um HTML de erro (404, 502, etc)
-          if (responseText.includes("<html") || responseText.includes("<!DOCTYPE")) {
-            console.error("[Asaas API Request] Erro: Resposta da Asaas é um HTML (provável erro de rota ou proxy na Asaas)");
-          }
-          parsedError = { errors: [{ description: responseText }] };
-        }
-        
-        const description = parsedError?.errors?.[0]?.description || 
-                           parsedError?.errors?.[0]?.message || 
-                           parsedError?.message ||
-                           "Erro desconhecido na API do Asaas";
-        
-        throw new Error(description);
-      }
-
-      try {
-        return JSON.parse(responseText);
-      } catch (e) {
-        console.error("[Asaas API Request] Erro ao parsear JSON de resposta bem-sucedida:", e);
-        throw new Error("Resposta da Asaas não é um JSON válido: " + responseText.substring(0, 100));
-      }
-    } catch (error: any) {
-      console.error(`[Asaas API Request] Erro na requisição: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // Route to create a subscription (R$ 29,90)
-  app.post("/api/asaas/assinar", async (req, res) => {
-    console.log(`[Asaas Sub API] Recebida requisição POST em /api/asaas/assinar`);
-    try {
-      const { clientName, email, phone, cnpjCpf, paymentMethod, ownerId } = req.body;
-      console.log(`[Asaas Sub API] Dados recebidos:`, { clientName, email, paymentMethod, ownerId });
-      
-      if (!ownerId) {
-        console.error("[Asaas Sub API] Erro: ownerId ausente");
-        res.status(400).json({ error: "ownerId é obrigatório" });
-        return;
-      }
-      if (!clientName || !email) {
-        console.error("[Asaas Sub API] Erro: Nome ou E-mail ausente");
-        res.status(400).json({ error: "Nome e E-mail são obrigatórios" });
-        return;
-      }
-
-      const apiKey = process.env.ASAAS_API_KEY;
-      if (!apiKey) {
-        res.status(400).json({ error: "Chave da API do Asaas (ASAAS_API_KEY) não está configurada no servidor." });
-        return;
-      }
-
-      console.log(`[Asaas Sub] Iniciando assinatura para ${clientName} (${email}) - ownerId: ${ownerId}`);
-
-      // 1. Find or create customer
-      let customerId = "";
-      const cleanCpfCnpj = cnpjCpf ? cnpjCpf.replace(/\D/g, "") : "";
-
-      try {
-        let searchPath = `/customers?email=${encodeURIComponent(email)}`;
-        if (cleanCpfCnpj) {
-          searchPath += `&cpfCnpj=${encodeURIComponent(cleanCpfCnpj)}`;
-        }
-        const searchRes = await asaasRequest("GET", searchPath);
-        if (searchRes.data && searchRes.data.length > 0) {
-          customerId = searchRes.data[0].id;
-          console.log(`[Asaas Sub] Cliente existente encontrado: ${customerId}`);
-        }
-      } catch (err) {
-        console.warn("[Asaas Sub] Erro ao buscar cliente, tentando criar:", err);
-      }
-
-      if (!customerId) {
-        const customerPayload: any = {
-          name: clientName,
-          email: email,
-        };
-        if (phone) customerPayload.phone = phone.replace(/\D/g, "");
-        if (cleanCpfCnpj) customerPayload.cpfCnpj = cleanCpfCnpj;
-
-        const customerRes = await asaasRequest("POST", "/customers", customerPayload);
-        customerId = customerRes.id;
-        console.log(`[Asaas Sub] Novo cliente criado: ${customerId}`);
-      }
-
-      // 2. Map billingType
-      let billingType = "PIX";
-      if (paymentMethod === "Boleto") {
-        billingType = "BOLETO";
-      } else if (paymentMethod === "Crédito") {
-        billingType = "CREDIT_CARD";
-      }
-
-      // 3. Create monthly subscription of 29.90
-      // Due date set to tomorrow to be safe
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const nextDueDate = tomorrow.toISOString().split("T")[0];
-
-      const subscriptionPayload = {
-        customer: customerId,
-        billingType,
-        value: 29.90,
-        nextDueDate,
-        cycle: "MONTHLY",
-        description: "Assinatura Mensal SisteNext ERP",
-      };
-
-      console.log("[Asaas Sub] Criando assinatura:", subscriptionPayload);
-      const subscriptionRes = await asaasRequest("POST", "/subscriptions", subscriptionPayload);
-      const subscriptionId = subscriptionRes.id;
-      console.log(`[Asaas Sub] Assinatura criada: ${subscriptionId}`);
-
-      // 4. Fetch the payments generated for this subscription
-      const paymentsRes = await asaasRequest("GET", `/subscriptions/${subscriptionId}/payments`);
-      let paymentId = "";
-      let invoiceUrl = "";
-      let status = "PENDING";
-
-      if (paymentsRes.data && paymentsRes.data.length > 0) {
-        paymentId = paymentsRes.data[0].id;
-        invoiceUrl = paymentsRes.data[0].invoiceUrl || paymentsRes.data[0].bankSlipUrl;
-        status = paymentsRes.data[0].status;
-      }
-
-      // 5. Fetch QR code or Barcode if applicable
-      let pixQrCode = "";
-      let pixCopyPaste = "";
-      let barCode = "";
-      let identificationField = "";
-
-      if (paymentId) {
-        if (billingType === "PIX") {
-          try {
-            const pixRes = await asaasRequest("GET", `/payments/${paymentId}/pixQrCode`);
-            pixQrCode = pixRes.encodedImage;
-            pixCopyPaste = pixRes.payload;
-          } catch (err) {
-            console.error("[Asaas Sub] Falha ao obter QR Code PIX:", err);
-          }
-        } else if (billingType === "BOLETO") {
-          try {
-            const slipRes = await asaasRequest("GET", `/payments/${paymentId}/identificationField`);
-            barCode = slipRes.barCode;
-            identificationField = slipRes.identificationField;
-          } catch (err) {
-            console.error("[Asaas Sub] Falha ao obter dados do boleto:", err);
-          }
-        }
-      }
-
-      // 6. Save subscription details in Firestore
-      const activeSubscription = {
-        subscriptionId,
-        paymentId,
-        status,
-        billingType,
-        paymentMethod,
-        value: 29.90,
-        nextDueDate,
-        invoiceUrl,
-        pixQrCode,
-        pixCopyPaste,
-        barCode,
-        identificationField,
-        customerName: clientName,
-        customerEmail: email,
-        customerPhone: phone || "",
-        customerCnpjCpf: cnpjCpf || "",
-        createdAt: new Date().toISOString()
-      };
-
-      if (db) {
-        try {
-          const docRef = doc(db, "configuracoes", ownerId);
-          const snap = await getDoc(docRef);
-          const currentConfig = snap.exists() ? snap.data() : {};
-          await setDoc(docRef, {
-            ...currentConfig,
-            activeSubscription,
-            updatedAt: new Date().toISOString()
-          });
-          console.log(`[Asaas Sub] Sub salva no Firestore para ${ownerId}`);
-        } catch (dbErr) {
-          console.error("[Asaas Sub] Erro ao persistir sub no Firestore:", dbErr);
-        }
-      }
-
-      res.json({
-        success: true,
-        activeSubscription
-      });
-    } catch (error: any) {
-      console.error("[Asaas Sub] Erro ao assinar:", error);
-      res.status(500).json({ error: error.message || "Erro interno ao processar assinatura" });
-    }
-  });
-
-  // Route to cancel a subscription
-  app.post("/api/asaas/cancelar", async (req, res) => {
-    try {
-      const { subscriptionId, ownerId } = req.body;
-      if (!subscriptionId || !ownerId) {
-        res.status(400).json({ error: "subscriptionId e ownerId são obrigatórios" });
-        return;
-      }
-
-      console.log(`[Asaas Sub] Cancelando assinatura ${subscriptionId} do owner ${ownerId}`);
-
-      // Call Asaas API to delete
-      await asaasRequest("DELETE", `/subscriptions/${subscriptionId}`);
-
-      // Update in Firestore
-      if (db) {
-        try {
-          const docRef = doc(db, "configuracoes", ownerId);
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            const currentConfig = snap.data();
-            if (currentConfig.activeSubscription) {
-              currentConfig.activeSubscription.status = "CANCELLED";
-            }
-            await setDoc(docRef, {
-              ...currentConfig,
-              updatedAt: new Date().toISOString()
-            });
-            console.log(`[Asaas Sub] Assinatura marcada como CANCELLED no Firestore`);
-          }
-        } catch (dbErr) {
-          console.error("[Asaas Sub] Erro ao atualizar cancelamento no Firestore:", dbErr);
-        }
-      }
-
-      res.json({ success: true, message: "Assinatura cancelada com sucesso" });
-    } catch (error: any) {
-      console.error("[Asaas Sub] Erro no cancelamento:", error);
-      res.status(500).json({ error: error.message || "Erro interno ao cancelar assinatura" });
-    }
-  });
-
-  // Route to sync payment status
-  app.get("/api/asaas/status/:paymentId", async (req, res) => {
-    try {
-      const { paymentId } = req.params;
-      const { ownerId } = req.query;
-
-      if (!paymentId) {
-        res.status(400).json({ error: "paymentId é obrigatório" });
-        return;
-      }
-
-      console.log(`[Asaas Sub] Sincronizando status de pagamento: ${paymentId}`);
-      const paymentRes = await asaasRequest("GET", `/payments/${paymentId}`);
-      const status = paymentRes.status;
-      const paymentDate = paymentRes.paymentDate || null;
-
-      if (ownerId && typeof ownerId === "string" && db) {
-        try {
-          const docRef = doc(db, "configuracoes", ownerId);
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            const currentConfig = snap.data();
-            if (currentConfig.activeSubscription && currentConfig.activeSubscription.paymentId === paymentId) {
-              currentConfig.activeSubscription.status = status;
-              if (paymentDate) {
-                currentConfig.activeSubscription.paymentDate = paymentDate;
-              }
-              await setDoc(docRef, {
-                ...currentConfig,
-                updatedAt: new Date().toISOString()
-              });
-              console.log(`[Asaas Sub] Firestore atualizado com status de pagamento: ${status}`);
-            }
-          }
-        } catch (dbErr) {
-          console.error("[Asaas Sub] Erro ao atualizar status no Firestore:", dbErr);
-        }
-      }
-
-      res.json({
-        success: true,
-        status,
-        paymentDate
-      });
-    } catch (error: any) {
-      console.error("[Asaas Sub] Erro na consulta de status:", error);
-      res.status(500).json({ error: error.message || "Erro ao consultar status de pagamento" });
-    }
-  });
-
-  // Webhook integration endpoint for Asaas (Express backend equivalent)
-  app.post("/api/webhook/asaas", async (req, res) => {
-    try {
-      const webhookToken = req.headers["asaas-access-token"];
-      const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
-
-      if (!expectedToken) {
-        console.error("[Asaas Webhook Server] Token de validação ASAAS_WEBHOOK_TOKEN não configurado nas variáveis de ambiente.");
-        res.status(500).json({ error: "Configuração do servidor pendente" });
-        return;
-      }
-
-      if (!webhookToken || webhookToken !== expectedToken) {
-        console.warn("[Asaas Webhook Server] Tentativa de acesso não autorizada. Token inválido.");
-        res.status(401).json({ error: "Não autorizado" });
-        return;
-      }
-
-      const { event, payment, subscription: subscriptionData } = req.body;
-      console.log(`[Asaas Webhook Server] Evento recebido: ${event}`);
-
-      if (!db) {
-        res.status(500).json({ error: "Banco de dados não disponível" });
-        return;
-      }
-
-      if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
-        const subscriptionId = payment?.subscription;
-        const paymentId = payment?.id;
-        const paymentStatus = payment?.status;
-        const paymentDate = payment?.paymentDate || new Date().toISOString().split("T")[0];
-
-        if (!subscriptionId) {
-          console.log("[Asaas Webhook Server] Pagamento sem assinatura associada, ignorando.");
-          res.json({ received: true });
-          return;
-        }
-
-        const q = query(collection(db, "configuracoes"), where("activeSubscription.subscriptionId", "==", subscriptionId));
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) {
-          console.warn(`[Asaas Webhook Server] Nenhuma configuração encontrada para a assinatura ${subscriptionId}`);
-          res.status(404).json({ error: "Assinatura não encontrada" });
-          return;
-        }
-
-        const docSnap = snapshot.docs[0];
-        const data = docSnap.data();
-        const activeSub = data.activeSubscription || {};
-
-        const updatedSubscription = {
-          ...activeSub,
-          status: paymentStatus,
-          paymentDate,
-          paymentId: paymentId || activeSub.paymentId,
-          updatedAt: new Date().toISOString()
-        };
-
-        await updateDoc(docSnap.ref, {
-          activeSubscription: updatedSubscription,
-          updatedAt: new Date().toISOString()
-        });
-
-        console.log(`[Asaas Webhook Server] Status atualizado no Firebase para o documento ${docSnap.id}`);
-      } 
-      else if (event === "PAYMENT_OVERDUE") {
-        const subscriptionId = payment?.subscription;
-
-        if (subscriptionId) {
-          const q = query(collection(db, "configuracoes"), where("activeSubscription.subscriptionId", "==", subscriptionId));
-          const snapshot = await getDocs(q);
-
-          if (!snapshot.empty) {
-            const docSnap = snapshot.docs[0];
-            const data = docSnap.data();
-            const activeSub = data.activeSubscription || {};
-
-            const updatedSubscription = {
-              ...activeSub,
-              status: "OVERDUE",
-              updatedAt: new Date().toISOString()
-            };
-
-            await updateDoc(docSnap.ref, {
-              activeSubscription: updatedSubscription,
-              updatedAt: new Date().toISOString()
-            });
-
-            console.log(`[Asaas Webhook Server] Assinatura ${subscriptionId} marcada como OVERDUE`);
-          }
-        }
-      } 
-      else if (event === "SUBSCRIPTION_DELETED") {
-        const subscriptionId = subscriptionData?.id;
-
-        if (subscriptionId) {
-          const q = query(collection(db, "configuracoes"), where("activeSubscription.subscriptionId", "==", subscriptionId));
-          const snapshot = await getDocs(q);
-
-          if (!snapshot.empty) {
-            const docSnap = snapshot.docs[0];
-            const data = docSnap.data();
-            const activeSub = data.activeSubscription || {};
-
-            const updatedSubscription = {
-              ...activeSub,
-              status: "CANCELLED",
-              updatedAt: new Date().toISOString()
-            };
-
-            await updateDoc(docSnap.ref, {
-              activeSubscription: updatedSubscription,
-              updatedAt: new Date().toISOString()
-            });
-
-            console.log(`[Asaas Webhook Server] Assinatura ${subscriptionId} marcada como CANCELLED`);
-          }
-        }
-      }
-
-      res.json({ received: true });
-    } catch (error: any) {
-      console.error("[Asaas Webhook Server] Erro crítico:", error);
-      res.status(500).json({ error: error.message || "Erro interno ao processar webhook" });
-    }
-  });
-
-  // Health check
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", time: new Date().toISOString() });
-  });
+  if (body) options.body = JSON.stringify(body);
+
+  console.log(`[Asaas API] ${method} ${url}`);
+  const response = await fetch(url, options);
+  const text = await response.text();
   
-  // Catch-all for unknown API routes to debug 404s
-  app.all("/api/*", (req, res) => {
-    console.warn(`[404 API] Rota não encontrada: ${req.method} ${req.url}`);
-    res.status(404).json({ 
-      error: `Rota API não encontrada: ${req.method} ${req.url}`,
-      message: "The page could not be found (API Fallback)"
-    });
-  });
-
-  // Serve static assets/dev server depending on environment
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+  if (!response.ok) {
+    let msg = "Asaas API Error";
+    try { msg = JSON.parse(text).errors[0].description; } catch { msg = text; }
+    throw new Error(msg);
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Sistemax Server running on http://0.0.0.0:${PORT}`);
-  });
+  return JSON.parse(text);
 }
 
-startServer().catch((err) => {
-  console.error("Failed to start server:", err);
+// --- API ROUTES ---
+
+app.post("/api/chat-gemini", async (req, res) => {
+  try {
+    const { prompt, systemInstruction } = req.body;
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: systemInstruction ? { systemInstruction } : {}
+    });
+    res.json({ text: response.text });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
+
+app.post("/api/asaas/assinar", async (req, res) => {
+  try {
+    const { clientName, email, cnpjCpf, paymentMethod, ownerId } = req.body;
+    if (!ownerId || !clientName || !email) return res.status(400).json({ error: "Missing fields" });
+
+    // 1. Customer
+    let customerId = "";
+    const cleanDoc = cnpjCpf?.replace(/\D/g, "");
+    try {
+      const search = await asaasRequest("GET", `/customers?email=${encodeURIComponent(email)}${cleanDoc ? `&cpfCnpj=${cleanDoc}` : ""}`);
+      if (search.data?.[0]) customerId = search.data[0].id;
+    } catch {}
+
+    if (!customerId) {
+      const customer = await asaasRequest("POST", "/customers", { name: clientName, email, cpfCnpj: cleanDoc });
+      customerId = customer.id;
+    }
+
+    // 2. Subscription
+    const billingType = paymentMethod === "Boleto" ? "BOLETO" : (paymentMethod === "Crédito" ? "CREDIT_CARD" : "PIX");
+    const nextDueDate = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+    const subRes = await asaasRequest("POST", "/subscriptions", {
+      customer: customerId, billingType, value: 29.90, nextDueDate, cycle: "MONTHLY", description: "SisteNext ERP"
+    });
+
+    // 3. Payment Details
+    const payments = await asaasRequest("GET", `/subscriptions/${subRes.id}/payments`);
+    const p = payments.data?.[0] || {};
+    
+    const activeSubscription = {
+      subscriptionId: subRes.id, paymentId: p.id, status: p.status, billingType, 
+      paymentMethod, value: 29.90, nextDueDate, invoiceUrl: p.invoiceUrl || p.bankSlipUrl,
+      customerName: clientName, customerEmail: email, createdAt: new Date().toISOString()
+    };
+
+    if (db) await setDoc(doc(db, "configuracoes", ownerId), { activeSubscription, updatedAt: new Date().toISOString() }, { merge: true });
+    res.json({ success: true, activeSubscription });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/asaas/cancelar", async (req, res) => {
+  try {
+    const { subscriptionId, ownerId } = req.body;
+    await asaasRequest("DELETE", `/subscriptions/${subscriptionId}`);
+    if (db) await updateDoc(doc(db, "configuracoes", ownerId), { "activeSubscription.status": "CANCELLED", updatedAt: new Date().toISOString() });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/asaas/status/:paymentId", async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const { ownerId } = req.query;
+    const p = await asaasRequest("GET", `/payments/${paymentId}`);
+    if (ownerId && db) await updateDoc(doc(db, "configuracoes", ownerId as string), { "activeSubscription.status": p.status, updatedAt: new Date().toISOString() });
+    res.json({ status: p.status });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/webhook/asaas", async (req, res) => {
+  try {
+    if (req.headers["asaas-access-token"] !== process.env.ASAAS_WEBHOOK_TOKEN) return res.status(401).send();
+    const { event, payment } = req.body;
+    const subId = payment?.subscription;
+    if (subId && db) {
+      const q = query(collection(db, "configuracoes"), where("activeSubscription.subscriptionId", "==", subId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        let status = "PENDING";
+        if (event.includes("RECEIVED") || event.includes("CONFIRMED")) status = "RECEIVED";
+        if (event === "PAYMENT_OVERDUE") status = "OVERDUE";
+        if (event === "SUBSCRIPTION_DELETED") status = "CANCELLED";
+        await updateDoc(snap.docs[0].ref, { "activeSubscription.status": status, updatedAt: new Date().toISOString() });
+      }
+    }
+    res.json({ received: true });
+  } catch (err) { res.status(500).send(); }
+});
+
+app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+
+// Static / Vite
+if (process.env.NODE_ENV !== "production") {
+  const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+  app.use(vite.middlewares);
+} else {
+  const dist = path.join(process.cwd(), "dist");
+  app.use(express.static(dist));
+  app.get("*", (req, res) => res.sendFile(path.join(dist, "index.html")));
+}
+
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  app.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
+}
+
+export default app;
