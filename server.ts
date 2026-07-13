@@ -3,8 +3,8 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { initializeApp, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
 
 dotenv.config();
@@ -12,20 +12,47 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// Firebase initialization
+// Firebase initialization using Firebase Admin SDK
 const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
 let db: any = null;
 
 if (fs.existsSync(firebaseConfigPath)) {
   try {
     const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
-    const firebaseApp = initializeApp(firebaseConfig);
-    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-    console.log("[Firebase Server] Initialized Firestore database:", firebaseConfig.firestoreDatabaseId);
+    const databaseId = firebaseConfig.firestoreDatabaseId;
+    let firebaseApp: any = null;
+    
+    // Attempt to use service account if provided in env, otherwise fallback to applet configuration
+    const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (serviceAccountVar) {
+      try {
+        const serviceAccount = JSON.parse(serviceAccountVar);
+        firebaseApp = initializeApp({
+          credential: cert(serviceAccount)
+        });
+        console.log("[Firebase Admin] Initialized with Service Account.");
+      } catch (parseErr) {
+        console.error("[Firebase Admin] Failed to parse service account env variable, falling back:", parseErr);
+        firebaseApp = initializeApp({
+          projectId: firebaseConfig.projectId
+        });
+      }
+    } else {
+      firebaseApp = initializeApp({
+        projectId: firebaseConfig.projectId
+      });
+      console.log("[Firebase Admin] Initialized with project ID:", firebaseConfig.projectId);
+    }
+    
+    // Create firestore instance with custom databaseId
+    db = getFirestore(firebaseApp, databaseId);
+    console.log("[Firebase Admin Server] Initialized Firestore database:", databaseId);
   } catch (err) {
-    console.error("[Firebase Server Init Error]:", err);
+    console.error("[Firebase Admin Server Init Error]:", err);
   }
 }
+
+
 
 const PORT = 3000;
 
@@ -119,7 +146,9 @@ app.post("/api/asaas/assinar", async (req, res) => {
       customerName: clientName, customerEmail: email, createdAt: new Date().toISOString()
     };
 
-    if (db) await setDoc(doc(db, "configuracoes", ownerId), { activeSubscription, updatedAt: new Date().toISOString() }, { merge: true });
+    if (db) {
+      await db.collection("configuracoes").doc(ownerId).set({ activeSubscription, updatedAt: new Date().toISOString() }, { merge: true });
+    }
     res.json({ success: true, activeSubscription });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -130,7 +159,9 @@ app.post("/api/asaas/cancelar", async (req, res) => {
   try {
     const { subscriptionId, ownerId } = req.body;
     await asaasRequest("DELETE", `/subscriptions/${subscriptionId}`);
-    if (db) await updateDoc(doc(db, "configuracoes", ownerId), { "activeSubscription.status": "CANCELLED", updatedAt: new Date().toISOString() });
+    if (db) {
+      await db.collection("configuracoes").doc(ownerId).update({ "activeSubscription.status": "CANCELLED", updatedAt: new Date().toISOString() });
+    }
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -142,8 +173,10 @@ app.get("/api/asaas/status/:paymentId", async (req, res) => {
     const { paymentId } = req.params;
     const { ownerId } = req.query;
     const p = await asaasRequest("GET", `/payments/${paymentId}`);
-    if (ownerId && db) await updateDoc(doc(db, "configuracoes", ownerId as string), { "activeSubscription.status": p.status, updatedAt: new Date().toISOString() });
-    res.json({ status: p.status });
+    if (ownerId && db) {
+      await db.collection("configuracoes").doc(ownerId as string).update({ "activeSubscription.status": p.status, updatedAt: new Date().toISOString() });
+    }
+    res.json({ success: true, status: p.status });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -155,14 +188,13 @@ app.post("/api/webhook/asaas", async (req, res) => {
     const { event, payment } = req.body;
     const subId = payment?.subscription;
     if (subId && db) {
-      const q = query(collection(db, "configuracoes"), where("activeSubscription.subscriptionId", "==", subId));
-      const snap = await getDocs(q);
+      const snap = await db.collection("configuracoes").where("activeSubscription.subscriptionId", "==", subId).get();
       if (!snap.empty) {
         let status = "PENDING";
         if (event.includes("RECEIVED") || event.includes("CONFIRMED")) status = "RECEIVED";
         if (event === "PAYMENT_OVERDUE") status = "OVERDUE";
         if (event === "SUBSCRIPTION_DELETED") status = "CANCELLED";
-        await updateDoc(snap.docs[0].ref, { "activeSubscription.status": status, updatedAt: new Date().toISOString() });
+        await snap.docs[0].ref.update({ "activeSubscription.status": status, updatedAt: new Date().toISOString() });
       }
     }
     res.json({ received: true });
