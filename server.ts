@@ -22,26 +22,20 @@ if (fs.existsSync(firebaseConfigPath)) {
     const databaseId = firebaseConfig.firestoreDatabaseId;
     let firebaseApp: any = null;
     
-    // Attempt to use service account if provided in env, otherwise fallback to applet configuration
+    // Ensure FIREBASE_SERVICE_ACCOUNT is configured to bypass confusing permission errors
     const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
-    if (serviceAccountVar) {
-      try {
-        const serviceAccount = JSON.parse(serviceAccountVar);
-        firebaseApp = initializeApp({
-          credential: cert(serviceAccount)
-        });
-        console.log("[Firebase Admin] Initialized with Service Account.");
-      } catch (parseErr) {
-        console.error("[Firebase Admin] Failed to parse service account env variable, falling back:", parseErr);
-        firebaseApp = initializeApp({
-          projectId: firebaseConfig.projectId
-        });
-      }
-    } else {
+    if (!serviceAccountVar) {
+      throw new Error("A variável de ambiente 'FIREBASE_SERVICE_ACCOUNT' não está configurada. Por favor, adicione as credenciais em formato JSON nas variáveis de ambiente.");
+    }
+
+    try {
+      const serviceAccount = JSON.parse(serviceAccountVar);
       firebaseApp = initializeApp({
-        projectId: firebaseConfig.projectId
+        credential: cert(serviceAccount)
       });
-      console.log("[Firebase Admin] Initialized with project ID:", firebaseConfig.projectId);
+      console.log("[Firebase Admin] Inicializado com sucesso utilizando Service Account.");
+    } catch (parseErr: any) {
+      throw new Error(`Falha ao parsear o JSON da variável de ambiente 'FIREBASE_SERVICE_ACCOUNT': ${parseErr.message}`);
     }
     
     // Create firestore instance with custom databaseId
