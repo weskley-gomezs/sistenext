@@ -76,24 +76,70 @@ export default function ContratosView({
       return;
     }
 
-    const template = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS
+    const formatDateLong = (dateStr: string) => {
+      if (!dateStr) return '___ de ______________ de 20___';
+      try {
+        const [year, month, day] = dateStr.split('-');
+        const months = [
+          'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        ];
+        const monthName = months[parseInt(month, 10) - 1] || '______________';
+        return `${parseInt(day, 10)} de ${monthName} de ${year}`;
+      } catch {
+        return '___ de ______________ de 20___';
+      }
+    };
+
+    const valorExtenso = formatBRL(Number(value) || 0);
+
+    const template = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS PROFISSIONAIS
+
+Por este instrumento particular, de um lado:
 
 CONTRATANTE: ${client.companyName}, inscrita no CNPJ sob nº ${client.cnpj || '00.000.000/0000-00'}, com sede em ${client.address || 'Endereço não informado'}.
 
 CONTRATADA: ${companyInfo.companyName || 'Sua Empresa'}, inscrita no CNPJ sob nº ${companyInfo.cnpj || '00.000.000/0000-00'}.
 
-1. OBJETO DO CONTRATO
-O presente instrumento tem como objeto a prestação de serviços pela CONTRATADA à CONTRATANTE, conforme especificado na proposta comercial vinculada a este contrato.
+As partes identificadas acima têm, entre si, justo e acertado o presente Contrato de Prestação de Serviços, que se regerá pelas seguintes cláusulas e condições:
 
-2. VALOR E CONDIÇÕES DE PAGAMENTO
-Pela prestação dos serviços, a CONTRATANTE pagará à CONTRATADA o valor de R$ ${(Number(value) || 0).toFixed(2)}, nas condições preestabelecidas.
+CLÁUSULA PRIMEIRA – DO OBJETO
+1.1. O presente contrato tem por objeto a prestação de serviços de "${title || 'Prestação de Serviços'}" pela CONTRATADA à CONTRATANTE, de forma independente, profissional e sem qualquer vínculo empregatício.
+1.2. Os detalhes específicos e cronograma das entregas seguirão os parâmetros acordados em comum acordo pelas partes e documentados em anexo técnico ou proposta comercial aceita.
 
-3. PRAZO E VIGÊNCIA
-Este contrato entra em vigor na data de sua assinatura e terá validade por prazo indeterminado, ou até a entrega final dos serviços.
+CLÁUSULA SEGUNDA – DAS OBRIGAÇÕES DA CONTRATADA
+2.1. Executar os serviços contratados com a máxima diligência, perícia técnica e qualidade comercial aceitável, observando as melhores práticas do mercado.
+2.2. Cumprir rigorosamente os prazos de entrega acordados no cronograma do projeto, salvo por atrasos causados diretamente por omissão ou atraso da CONTRATANTE.
+2.3. Manter sigilo sobre quaisquer dados ou informações obtidos em razão deste instrumento.
 
-E, por estarem justas e contratadas, as partes assinam o presente instrumento em duas vias de igual teor.
+CLÁUSULA TERCEIRA – DAS OBRIGAÇÕES DA CONTRATANTE
+3.1. Efetuar o pagamento dos honorários ajustados em conformidade com as datas e termos previstos na Cláusula Quarta.
+3.2. Fornecer de forma tempestiva e completa todas as informações, materiais, credenciais, logos e dados necessários para que a CONTRATADA possa dar início e continuidade aos serviços.
+3.3. Responder com celeridade às solicitações de aprovação e validação das etapas apresentadas.
 
-Local e Data: _________________, ${(date || '').split('-').reverse().join('/') || '___/___/____'}
+CLÁUSULA QUARTA – DO VALOR E CONDIÇÕES DE PAGAMENTO
+4.1. Pelos serviços objeto deste instrumento, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorExtenso} (${Number(value) ? 'pago conforme condições comerciais pactuadas' : 'valor sob consulta'}).
+4.2. Em caso de atraso injustificado nos pagamentos, incidirá multa moratória de 2% (dois por cento) sobre o valor em atraso, acrescido de juros de mora de 1% (um por cento) ao mês, pro rata die.
+4.3. O inadimplemento de qualquer parcela por período superior a 15 (quinze) dias confere à CONTRATADA o direito de suspender imediatamente a prestação de todos os serviços até a regularização do débito.
+
+CLÁUSULA QUINTA – DA CONFIDENCIALIDADE E LGPD
+5.1. Ambas as partes comprometem-se a proteger e tratar como confidenciais quaisquer segredos de negócios, informações técnicas, estratégicas ou de clientes trocadas durante este contrato.
+5.2. As partes se comprometem a cumprir integralmente as disposições da Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/18 - LGPD), tratando quaisquer dados pessoais com exclusiva finalidade de execução deste contrato e dotando seus sistemas de medidas adequadas de segurança.
+
+CLÁUSULA SEXTA – DA PROPRIEDADE INTELECTUAL
+6.1. Todos os direitos de propriedade intelectual sobre os materiais de entrega criados especificamente para a CONTRATANTE no âmbito deste contrato serão cedidos de forma definitiva e automática após a quitação integral dos valores descritos na Cláusula Quarta.
+
+CLÁUSULA SÉTIMA – DA VIGÊNCIA E RESCISÃO
+7.1. Este contrato entra em vigor na data de sua assinatura por ambas as partes e vigorará até a conclusão satisfatória de todas as entregas dos serviços ora previstos.
+7.2. Qualquer das partes poderá rescindir unilateralmente este instrumento, sem justa causa, mediante aviso prévio por escrito com antecedência mínima de 30 (trinta) dias.
+7.3. O contrato poderá ser rescindido de imediato, por justo motivo, no caso de insolvência judicial declarada ou descumprimento imotivado de qualquer das cláusulas aqui estipuladas, desde que não sanado o vício em até 5 (cinco) dias úteis após notificação.
+
+CLÁUSULA OITAVA – DO FORO
+8.1. Para dirimir quaisquer dúvidas ou litígios decorrentes deste contrato, as partes elegem, de comum acordo, o Foro da Comarca da CONTRATADA, com exclusão de qualquer outro, por mais privilegiado que seja.
+
+E, por estarem assim justas e contratadas, as partes firmam o presente instrumento em 02 (duas) vias de igual teor e forma para um só efeito legal.
+
+Local e Data: _____________, ${formatDateLong(date)}
 `;
     setContent(template);
   };

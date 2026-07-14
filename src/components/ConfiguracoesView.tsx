@@ -467,13 +467,6 @@ export default function ConfiguracoesView({
               <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                 <CreditCard size={14} className="text-indigo-500" /> Assinatura do Sistema
               </h3>
-              {asaasStatus && (
-                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
-                  asaasStatus.configured ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'
-                }`}>
-                  {asaasStatus.configured ? `Real (${asaasStatus.environment})` : 'Simulação'}
-                </span>
-              )}
             </div>
 
             {asaasStatus && !asaasStatus.configured && (
