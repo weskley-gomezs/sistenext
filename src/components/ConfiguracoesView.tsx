@@ -118,6 +118,12 @@ export default function ConfiguracoesView({
     }
   };
 
+  useEffect(() => {
+    if (timeLeft !== null && timeLeft <= 0 && activeSubscription && !cancelling) {
+      handleResetExpiredSubscription();
+    }
+  }, [timeLeft, activeSubscription, cancelling]);
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedText(true);
@@ -552,52 +558,34 @@ export default function ConfiguracoesView({
 
                 {/* Payments Section (If not received yet) */}
                 {!['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(activeSubscription.status) && (
-                  timeLeft !== null && timeLeft <= 0 ? (
-                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl space-y-3">
-                      <div className="space-y-1">
-                        <span className="text-[9px] uppercase font-black text-red-500 block">Fatura Expirada</span>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                          O tempo limite de 30 minutos para concluir o pagamento expirou. Para evitar faturas pendentes ou expiradas no Asaas, por favor, clique abaixo para gerar uma nova fatura de ativação.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleResetExpiredSubscription}
-                        disabled={cancelling}
-                        className="w-full py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-center flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[11px]"
+                  <div className="p-4 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+                    <div className="space-y-1">
+                      <span className="text-[9px] uppercase font-black text-indigo-500 flex items-center justify-between">
+                        <span>Aguardando Ativação</span>
+                        {timeLeft !== null && (
+                          <span className="font-mono text-[9px] bg-indigo-500/10 text-indigo-600 px-2 py-0.5 rounded-full animate-pulse">
+                            {timeLeft <= 0 ? 'Expirado' : `Expira em: ${formatTimeLeft(timeLeft)}`}
+                          </span>
+                        )}
+                      </span>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        {timeLeft !== null && timeLeft <= 0 
+                          ? 'Fatura expirada. Redirecionando para nova cobrança...'
+                          : 'Para concluir sua assinatura e manter todas as funcionalidades ativas, clique no botão abaixo para cadastrar o seu cartão de crédito com segurança no Asaas.'}
+                      </p>
+                    </div>
+                    {activeSubscription.invoiceUrl && (timeLeft === null || timeLeft > 0) && (
+                      <a
+                        href={activeSubscription.invoiceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-center flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[11px]"
                       >
-                        <RefreshCw size={12} className={cancelling ? 'animate-spin' : ''} />
-                        <span>Gerar Nova Cobrança</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-4 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
-                      <div className="space-y-1">
-                        <span className="text-[9px] uppercase font-black text-indigo-500 flex items-center justify-between">
-                          <span>Aguardando Ativação</span>
-                          {timeLeft !== null && (
-                            <span className="font-mono text-[9px] bg-indigo-500/10 text-indigo-600 px-2 py-0.5 rounded-full animate-pulse">
-                              Expira em: {formatTimeLeft(timeLeft)}
-                            </span>
-                          )}
-                        </span>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                          Para concluir sua assinatura e manter todas as funcionalidades ativas, clique no botão abaixo para cadastrar o seu cartão de crédito com segurança no Asaas.
-                        </p>
-                      </div>
-                      {activeSubscription.invoiceUrl && (
-                        <a
-                          href={activeSubscription.invoiceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-center flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[11px]"
-                        >
-                          <CreditCard size={12} />
-                          <span>Cadastrar Cartão de Crédito</span>
-                        </a>
-                      )}
-                    </div>
-                  )
+                        <CreditCard size={12} />
+                        <span>Cadastrar Cartão de Crédito</span>
+                      </a>
+                    )}
+                  </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
