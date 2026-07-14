@@ -344,11 +344,18 @@ app.get("/api/asaas/config-status", (req, res) => {
 });
 
 app.post("/api/leads", async (req, res) => {
+  console.log("[DEBUG] /api/leads - Request Received");
+  console.log("[DEBUG] Origin Header:", req.headers.origin);
+  console.log("[DEBUG] Method:", req.method);
+  console.log("[DEBUG] Content-Type:", req.headers["content-type"]);
+  console.log("[DEBUG] Body:", JSON.stringify(req.body, null, 2));
+
   try {
     const { nome, telefone, email, origem, dados } = req.body;
 
     // 1. Validar que nome e telefone existem (empresaId não é mais obrigatório do frontend)
     if (!nome || !telefone) {
+      console.log("[DEBUG] Status 400 - Missing mandatory fields");
       return res.status(400).json({
         success: false,
         error: "Campos obrigatórios ausentes: nome e telefone são necessários."
@@ -356,6 +363,7 @@ app.post("/api/leads", async (req, res) => {
     }
 
     if (!db) {
+      console.log("[DEBUG] Status 500 - Database not initialized");
       return res.status(500).json({
         success: false,
         error: "Banco de dados não inicializado no servidor."
@@ -395,13 +403,14 @@ app.post("/api/leads", async (req, res) => {
     };
 
     const docRef = await db.collection("leads").add(leadData);
+    console.log("[DEBUG] Status 200 - Lead successfully created ID:", docRef.id);
 
     res.json({
       success: true,
       leadId: docRef.id
     });
   } catch (err: any) {
-    console.error("[POST /api/leads Error]:", err);
+    console.error("[DEBUG] [POST /api/leads Error]:", err);
     res.status(500).json({
       success: false,
       error: err.message || "Erro interno ao processar lead"
