@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -11,6 +12,15 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
+
+// CORS configuration to allow external requests (e.g. from real estate landing pages)
+app.use(cors({
+  origin: true, // Allow any origin for now to confirm it's a CORS issue
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
+app.options("*", cors()); // Explicitly handle OPTIONS preflight for all routes
 
 // Firebase initialization using Firebase Admin SDK
 const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
