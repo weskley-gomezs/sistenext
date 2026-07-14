@@ -67,62 +67,7 @@ export default function ConfiguracoesView({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [asaasStatus, setAsaasStatus] = useState<{ configured: boolean; environment: string } | null>(null);
 
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!activeSubscription || ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(activeSubscription.status) || activeSubscription.status === 'CANCELLED') {
-      setTimeLeft(null);
-      return;
-    }
-
-    const calculateTimeLeft = () => {
-      if (!activeSubscription.createdAt) return 30 * 60 * 1000;
-      const createdTime = new Date(activeSubscription.createdAt).getTime();
-      const limitTime = createdTime + 30 * 60 * 1000;
-      const diff = limitTime - Date.now();
-      return diff > 0 ? diff : 0;
-    };
-
-    setTimeLeft(calculateTimeLeft());
-
-    const timer = setInterval(() => {
-      const left = calculateTimeLeft();
-      setTimeLeft(left);
-      if (left <= 0) {
-        clearInterval(timer);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [activeSubscription]);
-
-  const formatTimeLeft = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const handleResetExpiredSubscription = async () => {
-    if (!ownerId) return;
-    setCancelling(true);
-    try {
-      await setDoc(doc(db, 'configuracoes', ownerId), { activeSubscription: null }, { merge: true });
-      setActiveSubscription(null);
-      NotificationService.send('Fatura Expirada Resetada', { body: 'A fatura anterior foi removida. Você já pode gerar uma nova cobrança.' });
-    } catch (err: any) {
-      console.error(err);
-      NotificationService.send('Erro ao Resetar', { body: err.message });
-    } finally {
-      setCancelling(false);
-    }
-  };
-
-  useEffect(() => {
-    if (timeLeft !== null && timeLeft <= 0 && activeSubscription && !cancelling) {
-      handleResetExpiredSubscription();
-    }
-  }, [timeLeft, activeSubscription, cancelling]);
+  // No expiration or timer is needed anymore. We keep the subscription pending until it's synced (paid) or cancelled.
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -562,19 +507,12 @@ export default function ConfiguracoesView({
                     <div className="space-y-1">
                       <span className="text-[9px] uppercase font-black text-indigo-500 flex items-center justify-between">
                         <span>Aguardando Ativação</span>
-                        {timeLeft !== null && (
-                          <span className="font-mono text-[9px] bg-indigo-500/10 text-indigo-600 px-2 py-0.5 rounded-full animate-pulse">
-                            {timeLeft <= 0 ? 'Expirado' : `Expira em: ${formatTimeLeft(timeLeft)}`}
-                          </span>
-                        )}
                       </span>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        {timeLeft !== null && timeLeft <= 0 
-                          ? 'Fatura expirada. Redirecionando para nova cobrança...'
-                          : 'Para concluir sua assinatura e manter todas as funcionalidades ativas, clique no botão abaixo para cadastrar o seu cartão de crédito com segurança no Asaas.'}
+                        Para concluir sua assinatura e manter todas as funcionalidades ativas, clique no botão abaixo para cadastrar o seu cartão de crédito com segurança no Asaas.
                       </p>
                     </div>
-                    {activeSubscription.invoiceUrl && (timeLeft === null || timeLeft > 0) && (
+                    {activeSubscription.invoiceUrl && (
                       <a
                         href={activeSubscription.invoiceUrl}
                         target="_blank"
