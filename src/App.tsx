@@ -31,7 +31,7 @@ import {
 import Sidebar, { ActiveSection } from './components/Sidebar';
 import { NotificationManager } from './components/NotificationManager';
 import LoginView from './components/LoginView';
-import LandingPageView from './components/LandingPageView';
+import PropertyLandingPage from './components/PropertyLandingPage';
 import DashboardView from './components/DashboardView';
 import LeadsView from './components/LeadsView';
 import EmpresasView from './components/EmpresasView';
@@ -617,7 +617,7 @@ export default function App() {
         />
       );
     }
-    return <LandingPageView onEnterCRM={() => setShowLogin(true)} />;
+    return <PropertyLandingPage onEnterCRM={() => setShowLogin(true)} />;
   }
 
   // Render correct Active Section View Component dynamically
