@@ -252,6 +252,30 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "name", "email", "role", "status"]
+    },
+    "ClienteAssinatura": {
+      "title": "ClienteAssinatura",
+      "description": "Customer recurring subscription billing settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "value": { "type": "number" },
+        "cycle": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string" },
+        "description": { "type": "string" },
+        "asaasSubscriptionId": { "type": "string" },
+        "asaasCustomerId": { "type": "string" },
+        "invoiceUrl": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "nextDueDate": { "type": "string" },
+        "paymentId": { "type": "string" }
+      },
+      "required": ["id", "clientId", "clientName", "clientEmail", "value", "cycle", "paymentMethod", "status"]
     }
   },
   "firestore": {
@@ -306,6 +330,10 @@
     "equipe": {
       "schema": { "$ref": "#/entities/MembroEquipe" },
       "description": "Collection of team members"
+    },
+    "assinaturas_clientes": {
+      "schema": { "$ref": "#/entities/ClienteAssinatura" },
+      "description": "Collection of customer recurring subscription billing settings"
     }
   }
 }

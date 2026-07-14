@@ -210,6 +210,25 @@ export interface Financeiro {
   asaasBoletoIdentificationField?: string;
 }
 
+export interface ClienteAssinatura {
+  id: string;
+  ownerId?: string;
+  clientId: string;
+  clientName: string;
+  clientEmail: string;
+  value: number;
+  cycle: 'Mensal' | 'Anual';
+  paymentMethod: 'Pix' | 'Boleto' | 'Crédito';
+  status: 'Pendente' | 'Ativa' | 'Vencida' | 'Cancelada';
+  description: string;
+  asaasSubscriptionId?: string;
+  asaasCustomerId?: string;
+  invoiceUrl?: string;
+  createdAt: string;
+  nextDueDate?: string;
+  paymentId?: string;
+}
+
 export interface EventAgenda {
   id: string;
   ownerId?: string;

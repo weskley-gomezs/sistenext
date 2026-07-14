@@ -59,13 +59,64 @@ export default function ConfiguracoesView({
   const [subEmail, setSubEmail] = useState('');
   const [subPhone, setSubPhone] = useState('');
   const [subCnpjCpf, setSubCnpjCpf] = useState('');
-  const [subPaymentMethod, setSubPaymentMethod] = useState<'Pix' | 'Boleto' | 'Crédito'>('Pix');
+  const [subPaymentMethod, setSubPaymentMethod] = useState<'Pix' | 'Boleto' | 'Crédito'>('Crédito');
   const [subscribing, setSubscribing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [syncingSub, setSyncingSub] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [asaasStatus, setAsaasStatus] = useState<{ configured: boolean; environment: string } | null>(null);
+
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!activeSubscription || ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(activeSubscription.status) || activeSubscription.status === 'CANCELLED') {
+      setTimeLeft(null);
+      return;
+    }
+
+    const calculateTimeLeft = () => {
+      if (!activeSubscription.createdAt) return 30 * 60 * 1000;
+      const createdTime = new Date(activeSubscription.createdAt).getTime();
+      const limitTime = createdTime + 30 * 60 * 1000;
+      const diff = limitTime - Date.now();
+      return diff > 0 ? diff : 0;
+    };
+
+    setTimeLeft(calculateTimeLeft());
+
+    const timer = setInterval(() => {
+      const left = calculateTimeLeft();
+      setTimeLeft(left);
+      if (left <= 0) {
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activeSubscription]);
+
+  const formatTimeLeft = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleResetExpiredSubscription = async () => {
+    if (!ownerId) return;
+    setCancelling(true);
+    try {
+      await setDoc(doc(db, 'configuracoes', ownerId), { activeSubscription: null }, { merge: true });
+      setActiveSubscription(null);
+      NotificationService.send('Fatura Expirada Resetada', { body: 'A fatura anterior foi removida. Você já pode gerar uma nova cobrança.' });
+    } catch (err: any) {
+      console.error(err);
+      NotificationService.send('Erro ao Resetar', { body: err.message });
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -501,60 +552,52 @@ export default function ConfiguracoesView({
 
                 {/* Payments Section (If not received yet) */}
                 {!['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(activeSubscription.status) && (
-                  <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-3">
-                    <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider text-center">Efetue o pagamento para liberar o acesso</p>
-                    
-                    {activeSubscription.billingType === 'PIX' && activeSubscription.pixQrCode && (
-                      <div className="space-y-2 flex flex-col items-center">
-                        <div className="p-2 bg-white rounded-lg border border-slate-100 max-w-[140px] mx-auto shadow-sm">
-                          <img
-                            src={`data:image/png;base64,${activeSubscription.pixQrCode}`}
-                            alt="QR Code Pix"
-                            className="w-full h-auto object-contain"
-                          />
-                        </div>
-                        <button
-                          onClick={() => copyToClipboard(activeSubscription.pixCopyPaste || '')}
-                          className="py-1 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] rounded-lg font-bold flex items-center gap-1.5 cursor-pointer mx-auto transition-all"
-                        >
-                          <Copy size={11} />
-                          <span>{copiedText ? 'Copiado!' : 'Copiar Chave Copie e Cole'}</span>
-                        </button>
+                  timeLeft !== null && timeLeft <= 0 ? (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl space-y-3">
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-black text-red-500 block">Fatura Expirada</span>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                          O tempo limite de 30 minutos para concluir o pagamento expirou. Para evitar faturas pendentes ou expiradas no Asaas, por favor, clique abaixo para gerar uma nova fatura de ativação.
+                        </p>
                       </div>
-                    )}
-
-                    {activeSubscription.billingType === 'BOLETO' && activeSubscription.identificationField && (
-                      <div className="space-y-1.5">
-                        <span className="block text-[8px] uppercase font-bold text-slate-400">Linha Digitável</span>
-                        <div className="flex gap-1.5">
-                          <input
-                            type="text"
-                            readOnly
-                            value={activeSubscription.identificationField}
-                            className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-1.5 rounded-lg text-[9px] font-mono focus:outline-none"
-                          />
-                          <button
-                            onClick={() => copyToClipboard(activeSubscription.identificationField || '')}
-                            className="px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-bold flex items-center justify-center cursor-pointer transition-all"
-                          >
-                            <Copy size={11} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {activeSubscription.invoiceUrl && (
-                      <a
-                        href={activeSubscription.invoiceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-center flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[11px]"
+                      <button
+                        type="button"
+                        onClick={handleResetExpiredSubscription}
+                        disabled={cancelling}
+                        className="w-full py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-center flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[11px]"
                       >
-                        <ExternalLink size={11} />
-                        <span>Abrir Link de Pagamento</span>
-                      </a>
-                    )}
-                  </div>
+                        <RefreshCw size={12} className={cancelling ? 'animate-spin' : ''} />
+                        <span>Gerar Nova Cobrança</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-black text-indigo-500 flex items-center justify-between">
+                          <span>Aguardando Ativação</span>
+                          {timeLeft !== null && (
+                            <span className="font-mono text-[9px] bg-indigo-500/10 text-indigo-600 px-2 py-0.5 rounded-full animate-pulse">
+                              Expira em: {formatTimeLeft(timeLeft)}
+                            </span>
+                          )}
+                        </span>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                          Para concluir sua assinatura e manter todas as funcionalidades ativas, clique no botão abaixo para cadastrar o seu cartão de crédito com segurança no Asaas.
+                        </p>
+                      </div>
+                      {activeSubscription.invoiceUrl && (
+                        <a
+                          href={activeSubscription.invoiceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-center flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[11px]"
+                        >
+                          <CreditCard size={12} />
+                          <span>Cadastrar Cartão de Crédito</span>
+                        </a>
+                      )}
+                    </div>
+                  )
                 )}
 
                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -626,24 +669,12 @@ export default function ConfiguracoesView({
                     </div>
                   </div>
                   
-                  <div>
-                    <label className="block text-[9px] uppercase font-bold text-slate-500 mb-1">Forma de Pagamento</label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {(['Pix', 'Boleto', 'Crédito'] as const).map((method) => (
-                        <button
-                          key={method}
-                          type="button"
-                          onClick={() => setSubPaymentMethod(method)}
-                          className={`py-1.5 border rounded-lg font-bold text-[10px] cursor-pointer transition-all text-center ${
-                            subPaymentMethod === method
-                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
-                          }`}
-                        >
-                          {method}
-                        </button>
-                      ))}
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="block text-[9px] uppercase font-black text-indigo-500">Forma de Pagamento</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Cartão de Crédito Recorrente</span>
                     </div>
+                    <span className="text-[9px] uppercase font-black bg-indigo-500/10 text-indigo-500 px-2 py-0.5 rounded-md">Mensalidade</span>
                   </div>
                 </div>
 

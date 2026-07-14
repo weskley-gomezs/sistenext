@@ -23,7 +23,8 @@ import {
   Documento,
   FollowUp,
   MembroEquipe,
-  Log
+  Log,
+  ClienteAssinatura
 } from './types';
 
 // Components
@@ -146,6 +147,7 @@ export default function App() {
   const [membros, setMembros] = useState<MembroEquipe[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
   const [config, setConfig] = useState<any>(null);
+  const [assinaturasClientes, setAssinaturasClientes] = useState<ClienteAssinatura[]>([]);
 
   const currentUserEmail = user?.email?.toLowerCase() || '';
   const currentMember = membros.find(m => m.email?.toLowerCase() === currentUserEmail);
@@ -418,6 +420,7 @@ export default function App() {
       subscribeToCollection<Documento>('documentos', ownerId, setDocumentos),
       subscribeToCollection<MembroEquipe>('equipe', ownerId, setMembros),
       subscribeToCollection<Log>('logs', ownerId, setLogs),
+      subscribeToCollection<ClienteAssinatura>('assinaturas_clientes', ownerId, setAssinaturasClientes),
       onSnapshot(doc(db, 'configuracoes', ownerId), (snapshot) => {
         if (snapshot.exists()) {
           setConfig(snapshot.data() as any);
@@ -795,6 +798,8 @@ export default function App() {
           <FinanceiroView
             financeiro={filteredFinanceiro}
             clientes={filteredClientes}
+            assinaturasClientes={assinaturasClientes}
+            ownerId={user?.ownerId || ''}
             onAddFinanceiro={(payload) => {
               if (!user?.ownerId) return Promise.reject('No ownerId');
               return addItem('financeiro', { ...payload, ownerId: user.ownerId }, user.ownerId);

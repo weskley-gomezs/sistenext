@@ -167,6 +167,129 @@ app.post("/api/asaas/cancelar", async (req, res) => {
   }
 });
 
+// CLIENT SUBSCRIPTIONS ENDPOINTS
+app.post("/api/asaas/criar-assinatura-cliente", async (req, res) => {
+  try {
+    const { clientId, clientName, email, cnpjCpf, paymentMethod, value, cycle, description, ownerId } = req.body;
+    if (!ownerId || !clientId || !clientName || !email) {
+      return res.status(400).json({ error: "Campos obrigatórios ausentes" });
+    }
+
+    // 1. Resolve customer in Asaas
+    let customerId = "";
+    const cleanDoc = cnpjCpf?.replace(/\D/g, "");
+    try {
+      const search = await asaasRequest("GET", `/customers?email=${encodeURIComponent(email)}${cleanDoc ? `&cpfCnpj=${cleanDoc}` : ""}`);
+      if (search.data?.[0]) customerId = search.data[0].id;
+    } catch (e) {
+      console.warn("Could not find customer by search", e);
+    }
+
+    if (!customerId) {
+      const customer = await asaasRequest("POST", "/customers", { name: clientName, email, cpfCnpj: cleanDoc });
+      customerId = customer.id;
+    }
+
+    // 2. Create the subscription in Asaas
+    const billingType = paymentMethod === "Boleto" ? "BOLETO" : (paymentMethod === "Crédito" ? "CREDIT_CARD" : "PIX");
+    const nextDueDate = new Date(Date.now() + 86400000).toISOString().split("T")[0]; // tomorrow
+    const cycleValue = cycle === "Anual" ? "YEARLY" : "MONTHLY";
+
+    const subRes = await asaasRequest("POST", "/subscriptions", {
+      customer: customerId,
+      billingType,
+      value: Number(value),
+      nextDueDate,
+      cycle: cycleValue,
+      description: description || `Assinatura - ${clientName}`
+    });
+
+    // 3. Get first payment details
+    let p: any = {};
+    try {
+      const payments = await asaasRequest("GET", `/subscriptions/${subRes.id}/payments`);
+      p = payments.data?.[0] || {};
+    } catch (e) {
+      console.error("Erro ao carregar pagamentos da assinatura", e);
+    }
+
+    const subscriptionData = {
+      ownerId,
+      clientId,
+      clientName,
+      clientEmail: email,
+      value: Number(value),
+      cycle, // "Mensal" | "Anual"
+      paymentMethod, // "Pix" | "Boleto" | "Crédito"
+      status: "Ativa",
+      description: description || `Assinatura Recorrente`,
+      asaasSubscriptionId: subRes.id,
+      asaasCustomerId: customerId,
+      invoiceUrl: p.invoiceUrl || p.bankSlipUrl || "",
+      paymentId: p.id || "",
+      nextDueDate: subRes.nextDueDate || nextDueDate,
+      createdAt: new Date().toISOString()
+    };
+
+    if (db) {
+      // Save subscription in Firestore
+      const docRef = db.collection("assinaturas_clientes").doc();
+      const finalDoc = { ...subscriptionData, id: docRef.id };
+      await docRef.set(finalDoc);
+
+      // Create a pending transaction entry in the financeiro ledger to reflect this new charge
+      const finRef = db.collection("financeiro").doc();
+      await finRef.set({
+        id: finRef.id,
+        ownerId,
+        description: `${description || "Assinatura"} (${cycle === "Anual" ? "Anual" : "Mensal"})`,
+        type: "Receber",
+        category: "Mensalidade",
+        value: Number(value),
+        status: "Pendente",
+        date: nextDueDate,
+        clientName,
+        paymentMethod: paymentMethod === "Crédito" ? "Crédito" : (paymentMethod === "Boleto" ? "Boleto" : "Pix"),
+        createdAt: new Date().toISOString(),
+        asaasId: subRes.id,
+        asaasPaymentUrl: p.invoiceUrl || p.bankSlipUrl || ""
+      });
+
+      res.json({ success: true, subscription: finalDoc });
+    } else {
+      res.json({ success: true, subscription: subscriptionData });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/asaas/cancelar-assinatura-cliente", async (req, res) => {
+  try {
+    const { asaasSubscriptionId, id, ownerId } = req.body;
+    if (!asaasSubscriptionId || !id) {
+      return res.status(400).json({ error: "Missing subscription ids" });
+    }
+
+    try {
+      await asaasRequest("DELETE", `/subscriptions/${asaasSubscriptionId}`);
+    } catch (e: any) {
+      console.warn("Error deleting from Asaas (might already be deleted or invalid)", e);
+    }
+
+    if (db) {
+      await db.collection("assinaturas_clientes").doc(id).update({
+        status: "Cancelada",
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/asaas/status/:paymentId", async (req, res) => {
   try {
     const { paymentId } = req.params;
