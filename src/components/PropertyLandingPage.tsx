@@ -59,7 +59,6 @@ export default function PropertyLandingPage({ onEnterCRM }: PropertyLandingPageP
       telefone: formData.telefone,
       email: formData.email,
       origem: "Site Imobiliária",
-      empresaId: "ID_DA_EMPRESA", // O usuário deve substituir ou eu posso deixar assim por enquanto
       dados: {
         imovelId: imovelInfo.id,
         titulo: imovelInfo.titulo,

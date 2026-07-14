@@ -335,13 +335,13 @@ app.get("/api/asaas/config-status", (req, res) => {
 
 app.post("/api/leads", async (req, res) => {
   try {
-    const { nome, telefone, email, origem, empresaId, dados } = req.body;
+    const { nome, telefone, email, origem, dados } = req.body;
 
-    // 1. Validar que nome, telefone e empresaId existem
-    if (!nome || !telefone || !empresaId) {
+    // 1. Validar que nome e telefone existem (empresaId não é mais obrigatório do frontend)
+    if (!nome || !telefone) {
       return res.status(400).json({
         success: false,
-        error: "Campos obrigatórios ausentes: nome, telefone e empresaId são necessários."
+        error: "Campos obrigatórios ausentes: nome e telefone são necessários."
       });
     }
 
@@ -352,18 +352,36 @@ app.post("/api/leads", async (req, res) => {
       });
     }
 
-    // 2. Salvar no Firestore na coleção 'leads'
+    // Hardcoded ownerId for the system
+    const ownerId = "jg5b7eIoVFWKsGeyEShOGfviv2h2";
+
+    // 2. Salvar no Firestore na coleção 'leads' seguindo exatamente o formato do CRM
     const leadData = {
-      nome,
-      telefone,
+      ownerId,
+      name: nome,
+      company: dados?.titulo || "Lead Web",
+      representative: "API Externa",
+      phone: telefone,
+      whatsapp: telefone,
       email: email || "",
-      origem: origem || "API Externa",
-      empresaId,
-      // Mapping empresaId to ownerId ensures compatibility with existing security rules and CRM filtering
-      ownerId: empresaId,
-      dados: dados || {},
+      instagram: "",
+      linkedin: "",
+      city: "",
+      state: "",
+      site: "",
+      segment: "Imobiliário",
+      employeeCount: 0,
+      estimatedRevenue: 0,
+      source: origem || "Site Imobiliária",
+      entryDate: new Date().toISOString().split('T')[0],
+      notes: dados?.imovelId ? `Interesse no Imóvel ID: ${dados.imovelId}${dados.valor ? ` (Valor: ${dados.valor})` : ""}` : "Lead recebido via API",
       status: "Novo Lead",
-      createdAt: new Date().toISOString()
+      temperature: "Morno",
+      tags: ["API"],
+      estimatedValue: Number(dados?.valor) || 0,
+      winProbability: 50,
+      createdAt: new Date().toISOString(),
+      createdBy: "API"
     };
 
     const docRef = await db.collection("leads").add(leadData);
