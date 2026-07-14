@@ -333,6 +333,54 @@ app.get("/api/asaas/config-status", (req, res) => {
   });
 });
 
+app.post("/api/leads", async (req, res) => {
+  try {
+    const { nome, telefone, email, origem, empresaId, dados } = req.body;
+
+    // 1. Validar que nome, telefone e empresaId existem
+    if (!nome || !telefone || !empresaId) {
+      return res.status(400).json({
+        success: false,
+        error: "Campos obrigatórios ausentes: nome, telefone e empresaId são necessários."
+      });
+    }
+
+    if (!db) {
+      return res.status(500).json({
+        success: false,
+        error: "Banco de dados não inicializado no servidor."
+      });
+    }
+
+    // 2. Salvar no Firestore na coleção 'leads'
+    const leadData = {
+      nome,
+      telefone,
+      email: email || "",
+      origem: origem || "API Externa",
+      empresaId,
+      // Mapping empresaId to ownerId ensures compatibility with existing security rules and CRM filtering
+      ownerId: empresaId,
+      dados: dados || {},
+      status: "Novo Lead",
+      createdAt: new Date().toISOString()
+    };
+
+    const docRef = await db.collection("leads").add(leadData);
+
+    res.json({
+      success: true,
+      leadId: docRef.id
+    });
+  } catch (err: any) {
+    console.error("[POST /api/leads Error]:", err);
+    res.status(500).json({
+      success: false,
+      error: err.message || "Erro interno ao processar lead"
+    });
+  }
+});
+
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
 // Static / Vite Setup
