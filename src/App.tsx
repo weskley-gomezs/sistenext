@@ -746,6 +746,7 @@ export default function App() {
               if (!user?.ownerId) return Promise.resolve();
               return deleteItemWithJustification('propostas', id, data, justification, user.ownerId);
             }}
+            config={config}
           />
         );
       case 'projetos':
@@ -786,6 +787,7 @@ export default function App() {
               if (!user?.ownerId) return Promise.resolve();
               return deleteItemWithJustification('contratos', id, data, justification, user.ownerId);
             }}
+            config={config}
           />
         );
       case 'financeiro':

@@ -12,6 +12,7 @@ interface ContratosViewProps {
   onAddContrato: (cont: Omit<Contrato, 'id'>) => Promise<string>;
   onUpdateContrato: (id: string, cont: Partial<Contrato>) => Promise<void>;
   onDeleteContrato: (id: string, justification: string, data: Contrato) => Promise<void>;
+  config?: any;
 }
 
 export default function ContratosView({
@@ -19,30 +20,16 @@ export default function ContratosView({
   clientes,
   onAddContrato,
   onUpdateContrato,
-  onDeleteContrato
+  onDeleteContrato,
+  config
 }: ContratosViewProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [companyInfo, setCompanyInfo] = useState({ companyName: '', cnpj: '', logoUrl: '' });
   
-  React.useEffect(() => {
-    async function loadCompanyInfo() {
-      try {
-        const docRef = doc(db, 'configuracoes', 'global');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setCompanyInfo({
-            companyName: data.companyName || '',
-            cnpj: data.cnpj || '',
-            logoUrl: data.logoUrl || ''
-          });
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    loadCompanyInfo();
-  }, []);
+  const companyInfo = {
+    companyName: config?.companyName || config?.tradingName || '',
+    cnpj: config?.cnpj || '',
+    logoUrl: config?.logoBase64 || config?.logoUrl || ''
+  };
 
   // Form Fields
   const [clientId, setClientId] = useState('');

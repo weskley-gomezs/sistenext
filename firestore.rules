@@ -13,6 +13,11 @@ service cloud.firestore {
              (exists(profilePath) && get(profilePath).data.ownerId == ownerId);
     }
 
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // User Profiles: Users can read/write their own profile
     match /user_profiles/{userId} {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
@@ -24,20 +29,107 @@ service cloud.firestore {
       allow write: if isAuthenticated() && isAuthorized(request.resource.data.ownerId);
     }
 
+    // Configurations: Keyed by ownerId
+    match /configuracoes/{ownerId} {
+      allow read: if isAuthenticated() && isAuthorized(ownerId);
+      allow write: if isAuthenticated() && isAuthorized(ownerId);
+    }
+
     // Application Collections: Restricted by ownerId
-    match /{collection}/{id} {
-      allow read: if isAuthenticated() && 
-                  collection != 'user_profiles' && 
-                  collection != 'equipe' && (
-                    resource == null || 
-                    isAuthorized(resource.data.ownerId)
-                  );
-      allow write: if isAuthenticated() && 
-                   collection != 'user_profiles' && 
-                   collection != 'equipe' && (
-                     (resource == null || isAuthorized(resource.data.ownerId)) &&
-                     (request.resource == null || isAuthorized(request.resource.data.ownerId))
-                   );
+    match /leads/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /empresas/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /clientes/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /projetos/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /propostas/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /contratos/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /financeiro/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /agenda/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /follow_ups/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /anotacoes/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /documentos/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /logs/{id} {
+      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
     }
   }
 }

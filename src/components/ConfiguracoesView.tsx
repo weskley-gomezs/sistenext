@@ -7,6 +7,7 @@ import { formatCNPJ, formatPhone } from '../utils/masks';
 import { NotificationService } from '../utils/notificationService';
 import { setAppConfig, getAppConfig } from '../dbService';
 import { MembroEquipe } from '../types';
+import { ConfirmModal } from './ConfirmModal';
 
 interface ConfiguracoesViewProps {
   currentTheme: 'light' | 'dark';
@@ -63,6 +64,8 @@ export default function ConfiguracoesView({
   const [cancelling, setCancelling] = useState(false);
   const [syncingSub, setSyncingSub] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [asaasStatus, setAsaasStatus] = useState<{ configured: boolean; environment: string } | null>(null);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -124,13 +127,18 @@ export default function ConfiguracoesView({
   };
 
   const handleCancelSubscription = async () => {
-    if (!activeSubscription || !activeSubscription.subscriptionId || !ownerId) {
-      console.warn('[Config] Cancelamento abortado: dados insuficientes', { activeSubscription, ownerId });
-      return;
-    }
+    if (!activeSubscription || !ownerId) return;
     
     setCancelling(true);
     try {
+      if (!activeSubscription.subscriptionId) {
+        // Clear locally if no subscriptionId exists (e.g. pending local state only)
+        await setDoc(doc(db, 'configuracoes', ownerId), { activeSubscription: null }, { merge: true });
+        setActiveSubscription(null);
+        NotificationService.send('Inscrição Removida', { body: 'Inscrição pendente removida.' });
+        return;
+      }
+
       const response = await fetch('/api/asaas/cancelar', {
         method: 'POST',
         headers: {
@@ -151,7 +159,6 @@ export default function ConfiguracoesView({
       NotificationService.send('Assinatura Cancelada', { body: 'Sua assinatura foi removida com sucesso.' });
     } catch (err: any) {
       console.error(err);
-      // Fallback for visual feedback if alert is blocked
       NotificationService.send('Erro no Cancelamento', { body: err.message });
     } finally {
       setCancelling(false);
@@ -230,6 +237,13 @@ export default function ConfiguracoesView({
           } else {
             setActiveSubscription(null);
           }
+        }
+        
+        // Fetch Asaas config status from our custom route
+        const asaasRes = await fetch('/api/asaas/config-status');
+        if (asaasRes.ok) {
+          const asaasData = await asaasRes.json();
+          setAsaasStatus(asaasData);
         }
       } catch (error) {
         console.error('Erro ao carregar configurações:', error);
@@ -449,9 +463,27 @@ export default function ConfiguracoesView({
 
           {/* Assinatura do Sistema Asaas */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 p-5 rounded-2xl shadow-sm space-y-3.5">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <CreditCard size={14} className="text-indigo-500" /> Assinatura do Sistema
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <CreditCard size={14} className="text-indigo-500" /> Assinatura do Sistema
+              </h3>
+              {asaasStatus && (
+                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+                  asaasStatus.configured ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'
+                }`}>
+                  {asaasStatus.configured ? `Real (${asaasStatus.environment})` : 'Simulação'}
+                </span>
+              )}
+            </div>
+
+            {asaasStatus && !asaasStatus.configured && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1">
+                <span className="text-[10px] uppercase font-black text-amber-600 dark:text-amber-400 block">Chave API Desconectada</span>
+                <p className="text-[9px] text-slate-500 dark:text-slate-400">
+                  Para habilitar assinaturas reais no Asaas, acesse o painel de <strong>Secrets</strong> nas configurações da barra lateral do AI Studio e defina a variável <strong>ASAAS_API_KEY</strong>.
+                </p>
+              </div>
+            )}
             
             {activeSubscription && activeSubscription.status !== 'CANCELLED' ? (
               <div className="space-y-4">
@@ -542,7 +574,8 @@ export default function ConfiguracoesView({
                     <span>Sincronizar</span>
                   </button>
                   <button
-                    onClick={handleCancelSubscription}
+                    type="button"
+                    onClick={() => setShowCancelConfirm(true)}
                     disabled={cancelling}
                     className="py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all text-[10px]"
                   >
@@ -722,6 +755,18 @@ export default function ConfiguracoesView({
           </div>
         </div>
       </div>
+      <ConfirmModal
+        isOpen={showCancelConfirm}
+        title="Cancelar Assinatura"
+        message="Tem certeza de que deseja cancelar sua assinatura mensal de R$ 29,90? O acesso a alguns recursos poderá ser suspenso."
+        confirmText="Sim, Cancelar"
+        requireJustification={false}
+        onConfirm={async () => {
+          setShowCancelConfirm(false);
+          await handleCancelSubscription();
+        }}
+        onCancel={() => setShowCancelConfirm(false)}
+      />
     </div>
   );
 }

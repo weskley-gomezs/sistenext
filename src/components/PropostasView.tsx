@@ -13,6 +13,7 @@ interface PropostasViewProps {
   onAddProposta: (prop: Omit<Proposta, 'id'>) => Promise<string>;
   onUpdateProposta: (id: string, prop: Partial<Proposta>) => Promise<void>;
   onDeleteProposta: (id: string, justification: string, data: Proposta) => Promise<void>;
+  config?: any;
 }
 
 export default function PropostasView({
@@ -21,32 +22,18 @@ export default function PropostasView({
   leads,
   onAddProposta,
   onUpdateProposta,
-  onDeleteProposta
+  onDeleteProposta,
+  config
 }: PropostasViewProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedProposalForPrint, setSelectedProposalForPrint] = useState<Proposta | null>(null);
-  const [companyInfo, setCompanyInfo] = useState({ companyName: '', cnpj: '', logoUrl: '' });
   const [itemToDeleteId, setItemToDeleteId] = useState<string | null>(null);
   
-  React.useEffect(() => {
-    async function loadCompanyInfo() {
-      try {
-        const docRef = doc(db, 'configuracoes', 'global');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setCompanyInfo({
-            companyName: data.companyName || '',
-            cnpj: data.cnpj || '',
-            logoUrl: data.logoUrl || ''
-          });
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    loadCompanyInfo();
-  }, []);
+  const companyInfo = {
+    companyName: config?.companyName || config?.tradingName || '',
+    cnpj: config?.cnpj || '',
+    logoUrl: config?.logoBase64 || config?.logoUrl || ''
+  };
 
   // Form Fields
   const [clientId, setClientId] = useState('');

@@ -60,7 +60,9 @@ const getAiClient = () => {
 // Asaas API Helper
 async function asaasRequest(method: string, path: string, body?: any) {
   const apiKey = process.env.ASAAS_API_KEY;
-  if (!apiKey) throw new Error("ASAAS_API_KEY is not configured.");
+  if (!apiKey || apiKey.trim() === "" || apiKey.includes("MY_ASAAS") || apiKey.includes("YOUR_")) {
+    throw new Error("A chave de API do Asaas não está configurada. Por favor, acesse o menu Configurações > Secrets na barra lateral do AI Studio e defina a variável 'ASAAS_API_KEY' com sua chave de API do Asaas (Sandbox ou Produção).");
+  }
 
   const envUrl = process.env.ASAAS_API_URL;
   const baseUrl = envUrl 
@@ -83,6 +85,9 @@ async function asaasRequest(method: string, path: string, body?: any) {
   if (!response.ok) {
     let msg = "Asaas API Error";
     try { msg = JSON.parse(text).errors[0].description; } catch { msg = text; }
+    if (msg.includes("chave de API fornecida é inválida") || response.status === 401 || response.status === 403) {
+      throw new Error("A chave de API fornecida para o Asaas é inválida ou expirou. Por favor, acesse o menu Configurações > Secrets na barra lateral do AI Studio e atualize a variável 'ASAAS_API_KEY' com uma chave de API válida.");
+    }
     throw new Error(msg);
   }
   return JSON.parse(text);
@@ -193,6 +198,16 @@ app.post("/api/webhook/asaas", async (req, res) => {
     }
     res.json({ received: true });
   } catch (err) { res.status(500).send(); }
+});
+
+app.get("/api/asaas/config-status", (req, res) => {
+  const apiKey = process.env.ASAAS_API_KEY;
+  const isConfigured = !!apiKey && apiKey.trim() !== "" && !apiKey.includes("MY_ASAAS") && !apiKey.includes("YOUR_");
+  const isSandbox = isConfigured ? (apiKey.includes("test") || process.env.ASAAS_SANDBOX === "true") : true;
+  res.json({
+    configured: isConfigured,
+    environment: isSandbox ? "sandbox" : "production"
+  });
 });
 
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
