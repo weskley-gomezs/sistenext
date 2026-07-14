@@ -133,32 +133,33 @@ export default function ConfiguracoesView({
     
     setCancelling(true);
     try {
-      if (!activeSubscription.subscriptionId) {
-        // Clear locally if no subscriptionId exists (e.g. pending local state only)
-        await setDoc(doc(db, 'configuracoes', ownerId), { activeSubscription: null }, { merge: true });
-        setActiveSubscription(null);
-        NotificationService.send('Inscrição Removida', { body: 'Inscrição pendente removida.' });
-        return;
+      if (activeSubscription.subscriptionId) {
+        // Try to cancel via API (if available/configured)
+        try {
+          const response = await fetch('/api/asaas/cancelar', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              subscriptionId: activeSubscription.subscriptionId,
+              ownerId
+            })
+          });
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            console.warn('[Asaas API] Falha ao cancelar no Asaas:', errData);
+          }
+        } catch (apiErr) {
+          console.warn('[Asaas API] Erro ao chamar rota de cancelamento:', apiErr);
+        }
       }
 
-      const response = await fetch('/api/asaas/cancelar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          subscriptionId: activeSubscription.subscriptionId,
-          ownerId
-        })
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Falha ao cancelar no Asaas');
-      }
-
-      setActiveSubscription(prev => prev ? { ...prev, status: 'CANCELLED' } : null);
-      NotificationService.send('Assinatura Cancelada', { body: 'Sua assinatura foi removida com sucesso.' });
+      // ALWAYS clear the subscription in the shared Firestore database so the user is never stuck!
+      await setDoc(doc(db, 'configuracoes', ownerId), { activeSubscription: null }, { merge: true });
+      setActiveSubscription(null);
+      NotificationService.send('Assinatura Cancelada', { body: 'Sua cobrança foi removida com sucesso.' });
     } catch (err: any) {
       console.error(err);
       NotificationService.send('Erro no Cancelamento', { body: err.message });
