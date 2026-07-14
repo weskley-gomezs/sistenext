@@ -32,20 +32,26 @@ if (fs.existsSync(firebaseConfigPath)) {
     const databaseId = firebaseConfig.firestoreDatabaseId;
     let firebaseApp: any = null;
     
-    // Ensure FIREBASE_SERVICE_ACCOUNT is configured to bypass confusing permission errors
+    // Ensure FIREBASE_SERVICE_ACCOUNT is configured if needed, otherwise fallback to default credentials
     const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
-    if (!serviceAccountVar) {
-      throw new Error("A variável de ambiente 'FIREBASE_SERVICE_ACCOUNT' não está configurada. Por favor, adicione as credenciais em formato JSON nas variáveis de ambiente.");
+    if (serviceAccountVar) {
+      try {
+        const serviceAccount = JSON.parse(serviceAccountVar);
+        firebaseApp = initializeApp({
+          credential: cert(serviceAccount)
+        });
+        console.log("[Firebase Admin] Inicializado com sucesso utilizando Service Account.");
+      } catch (parseErr: any) {
+        console.error(`Falha ao parsear o JSON da variável de ambiente 'FIREBASE_SERVICE_ACCOUNT': ${parseErr.message}`);
+      }
     }
 
-    try {
-      const serviceAccount = JSON.parse(serviceAccountVar);
+    if (!firebaseApp) {
+      // Fallback: initialize with just projectId (works in GCP/Cloud Run with attached Service Account)
       firebaseApp = initializeApp({
-        credential: cert(serviceAccount)
+        projectId: firebaseConfig.projectId
       });
-      console.log("[Firebase Admin] Inicializado com sucesso utilizando Service Account.");
-    } catch (parseErr: any) {
-      throw new Error(`Falha ao parsear o JSON da variável de ambiente 'FIREBASE_SERVICE_ACCOUNT': ${parseErr.message}`);
+      console.log("[Firebase Admin] Inicializado utilizando Project ID (fallback).");
     }
     
     // Create firestore instance with custom databaseId

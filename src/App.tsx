@@ -31,7 +31,7 @@ import {
 import Sidebar, { ActiveSection } from './components/Sidebar';
 import { NotificationManager } from './components/NotificationManager';
 import LoginView from './components/LoginView';
-import PropertyLandingPage from './components/PropertyLandingPage';
+import LandingPageView from './components/LandingPageView';
 import DashboardView from './components/DashboardView';
 import LeadsView from './components/LeadsView';
 import EmpresasView from './components/EmpresasView';
@@ -377,12 +377,14 @@ export default function App() {
               });
             }
           }
+          setAuthChecking(false);
         }, (err) => {
           console.error("Profile subscription error:", err);
           setUser({
             ...firebaseUser,
             ownerId: firebaseUser.uid
           });
+          setAuthChecking(false);
         });
       } else {
         setUser(null);
@@ -390,8 +392,8 @@ export default function App() {
           profileUnsub();
           profileUnsub = null;
         }
+        setAuthChecking(false);
       }
-      setAuthChecking(false);
     });
 
     return () => {
@@ -617,7 +619,7 @@ export default function App() {
         />
       );
     }
-    return <PropertyLandingPage onEnterCRM={() => setShowLogin(true)} />;
+    return <LandingPageView onEnterCRM={() => setShowLogin(true)} />;
   }
 
   // Render correct Active Section View Component dynamically
