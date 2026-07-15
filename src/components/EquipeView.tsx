@@ -112,7 +112,6 @@ export default function EquipeView({
         const payload: Partial<MembroEquipe> = {
           name,
           email: email.trim().toLowerCase(),
-          password: password || undefined,
           role,
           phone,
           status,
@@ -120,6 +119,9 @@ export default function EquipeView({
           salesGoal: salesGoal || 0,
           phoneGoal: phoneGoal || 0
         };
+        if (password) {
+          payload.password = password;
+        }
         await onUpdateMembro(editingMembro.id, payload);
       } else {
         const payload: Omit<MembroEquipe, 'id'> = {

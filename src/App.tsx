@@ -894,7 +894,12 @@ export default function App() {
               if (!user?.ownerId) return Promise.reject('No ownerId');
               if (id.startsWith('owner-')) {
                 // Update owner's own profile instead of the team list
-                await updateDoc(doc(db, 'user_profiles', user.uid), payload);
+                // Safety check: remove undefined fields from payload for Firestore compatibility
+                const cleanPayload = Object.fromEntries(
+                  Object.entries(payload).filter(([_, v]) => v !== undefined)
+                );
+                
+                await updateDoc(doc(db, 'user_profiles', user.uid), cleanPayload);
                 
                 // Write audit log entry
                 const logRef = doc(collection(db, 'logs'));
@@ -907,7 +912,7 @@ export default function App() {
                   justification: 'Atualizou seu próprio perfil de Administrador',
                   timestamp: new Date().toISOString(),
                   user: user.email || 'Sistema',
-                  data: payload
+                  data: cleanPayload
                 });
                 return;
               }
