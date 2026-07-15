@@ -282,6 +282,16 @@ export interface AppConfig {
   primaryColor: string;
   secondaryColor: string;
   backupEnabled: boolean;
+  generalGoal?: number;
+  phoneGoal?: number;
+  commissionRate?: number;
+  activeSubscription?: any;
+  tradingName?: string;
+  cnpj?: string;
+  supportEmail?: string;
+  phone?: string;
+  address?: string;
+  logoBase64?: string;
 }
 
 export interface Log {

@@ -131,6 +131,11 @@ export default function DashboardView({
     .filter((f) => f.type === 'Receber' && f.date.startsWith(currentYear))
     .reduce((sum, f) => sum + f.value, 0);
 
+  const phoneContactsThisMonth = followUps.filter(f => 
+    f.type === 'Ligação' && 
+    f.date.includes(`${currentYear}-${currentMonth}`)
+  ).length;
+
   // Next reunions (Agenda events with type 'Reunião')
   const upcomingReunions = agenda
     .filter((a) => a.type === 'Reunião')
@@ -582,16 +587,16 @@ export default function DashboardView({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Company General Goal */}
-          <div className="lg:col-span-6 space-y-4 bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-4 rounded-xl">
+          <div className="space-y-4 bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-4 rounded-xl">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest block mb-0.5">Foco Geral</span>
-                <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Meta Geral da Empresa</h4>
+                <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest block mb-0.5">Faturamento</span>
+                <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Meta de Vendas Geral</h4>
               </div>
               <div className="text-right">
-                <span className="text-[10px] text-slate-400 block font-bold">Meta Definida</span>
+                <span className="text-[10px] text-slate-400 block font-bold">Objetivo</span>
                 <span className="text-xs font-black text-slate-900 dark:text-white font-mono">
                   {config?.generalGoal ? formatBRL(config.generalGoal) : 'Não definida'}
                 </span>
@@ -602,7 +607,7 @@ export default function DashboardView({
               <div className="space-y-2">
                 <div className="flex justify-between items-end text-xs">
                   <div>
-                    <span className="text-slate-400 text-[10px] block font-bold">Faturamento Acumulado</span>
+                    <span className="text-slate-400 text-[10px] block font-bold">Realizado</span>
                     <span className="text-lg font-black text-emerald-500 font-mono">
                       {formatBRL(soldThisMonth)}
                     </span>
@@ -611,44 +616,77 @@ export default function DashboardView({
                     <span className="text-indigo-600 dark:text-indigo-400 font-black font-mono text-sm">
                       {Math.round((soldThisMonth / config.generalGoal) * 100)}%
                     </span>
-                    <span className="text-[9px] text-slate-400 block uppercase font-bold">Concluído</span>
                   </div>
                 </div>
 
-                <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-3 overflow-hidden">
+                <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
                   <div 
                     className="bg-emerald-500 h-full rounded-full transition-all duration-700"
                     style={{ width: `${Math.min(100, Math.round((soldThisMonth / config.generalGoal) * 100))}%` }}
                   />
                 </div>
+              </div>
+            ) : (
+              <div className="text-[10px] text-slate-400 italic text-center py-4 bg-slate-100/50 dark:bg-slate-900/40 rounded-xl">
+                Meta Geral não cadastrada.
+              </div>
+            )}
+          </div>
 
-                <div className="flex justify-between items-center text-[10px] pt-1">
-                  <span className="text-slate-400 font-medium">Restam {formatBRL(Math.max(0, config.generalGoal - soldThisMonth))} para a meta</span>
-                  <span className={`px-2 py-0.5 rounded-full font-black uppercase tracking-widest text-[8px] ${
-                    soldThisMonth >= config.generalGoal 
-                      ? 'bg-emerald-500/10 text-emerald-500' 
-                      : 'bg-indigo-500/10 text-indigo-500'
-                  }`}>
-                    {soldThisMonth >= config.generalGoal ? 'Meta Batida! 🏆' : 'Em Progresso'}
-                  </span>
+          {/* Phone Goal */}
+          <div className="space-y-4 bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-4 rounded-xl">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest block mb-0.5">Atividade</span>
+                <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Meta de Contatos (Fone)</h4>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 block font-bold">Objetivo</span>
+                <span className="text-xs font-black text-slate-900 dark:text-white font-mono">
+                  {config?.phoneGoal ? `${config.phoneGoal} ligações` : 'Não definida'}
+                </span>
+              </div>
+            </div>
+
+            {config?.phoneGoal && config.phoneGoal > 0 ? (
+              <div className="space-y-2">
+                <div className="flex justify-between items-end text-xs">
+                  <div>
+                    <span className="text-slate-400 text-[10px] block font-bold">Efetuado</span>
+                    <span className="text-lg font-black text-indigo-500 font-mono">
+                      {phoneContactsThisMonth}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-emerald-600 dark:text-emerald-400 font-black font-mono text-sm">
+                      {Math.round((phoneContactsThisMonth / config.phoneGoal) * 100)}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                  <div 
+                    className="bg-indigo-500 h-full rounded-full transition-all duration-700"
+                    style={{ width: `${Math.min(100, Math.round((phoneContactsThisMonth / config.phoneGoal) * 100))}%` }}
+                  />
                 </div>
               </div>
             ) : (
-              <div className="text-xs text-slate-400 italic text-center py-6 bg-slate-100/50 dark:bg-slate-900/40 rounded-xl">
-                A Meta Geral da Empresa ainda não foi cadastrada nas configurações do sistema.
+              <div className="text-[10px] text-slate-400 italic text-center py-4 bg-slate-100/50 dark:bg-slate-900/40 rounded-xl">
+                Meta de Fone não cadastrada.
               </div>
             )}
           </div>
 
           {/* Individual Sales Goals or Leaderboard */}
-          <div className="lg:col-span-6 space-y-4">
+          <div className="space-y-4">
             <div className="bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-4 rounded-xl space-y-3 h-full">
               <div className="flex justify-between items-center">
                 <div>
-                  <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest block mb-0.5">Visão Comparativa</span>
-                  <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Metas Individuais da Equipe</h4>
+                  <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest block mb-0.5">Consultores</span>
+                  <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Metas Individuais</h4>
                 </div>
-                <span className="text-[9px] text-slate-400 font-bold uppercase">Total Vendido vs Meta</span>
+                <span className="text-[9px] text-slate-400 font-bold uppercase">Realizado vs Meta</span>
               </div>
 
               {(() => {

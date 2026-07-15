@@ -45,7 +45,9 @@ export default function ConfiguracoesView({
     address: '',
     logoUrl: '',
     logoBase64: '',
-    generalGoal: 0
+    generalGoal: 0,
+    phoneGoal: 0,
+    commissionRate: 0
   });
 
   const [saving, setSaving] = useState(false);
@@ -232,7 +234,9 @@ export default function ConfiguracoesView({
             address: data.address || '',
             logoUrl: data.logoUrl || '',
             logoBase64: data.logoBase64 || '',
-            generalGoal: Number(data.generalGoal || 0)
+            generalGoal: Number(data.generalGoal || 0),
+            phoneGoal: Number(data.phoneGoal || 0),
+            commissionRate: Number(data.commissionRate || 0)
           };
           setFormData(configObj);
           if (data.activeSubscription) {
@@ -428,16 +432,41 @@ export default function ConfiguracoesView({
               </div>
             </div>
 
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Meta de Vendas Geral da Empresa (R$)</label>
-              <input
-                type="number"
-                min={0}
-                value={formData.generalGoal || ''}
-                onChange={(e) => setFormData({ ...formData, generalGoal: Number(e.target.value) })}
-                placeholder="Ex: 500000"
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-mono font-bold text-indigo-600 dark:text-indigo-400"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Meta de Vendas Geral (R$)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.generalGoal || ''}
+                  onChange={(e) => setFormData({ ...formData, generalGoal: Number(e.target.value) })}
+                  placeholder="Ex: 50000"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-mono font-bold text-indigo-600 dark:text-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Meta de Contatos (Telefone)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.phoneGoal || ''}
+                  onChange={(e) => setFormData({ ...formData, phoneGoal: Number(e.target.value) })}
+                  placeholder="Ex: 100"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-mono font-bold text-emerald-600 dark:text-emerald-400"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Comissão Padrão (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={formData.commissionRate || ''}
+                  onChange={(e) => setFormData({ ...formData, commissionRate: Number(e.target.value) })}
+                  placeholder="Ex: 10"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-mono font-bold text-amber-600 dark:text-amber-400"
+                />
+              </div>
             </div>
 
             <div>

@@ -8,7 +8,6 @@ import { exportToPDF } from '../utils/pdfExport';
 interface FinanceiroViewProps {
   financeiro: Financeiro[];
   clientes: Cliente[];
-  assinaturasClientes?: ClienteAssinatura[];
   ownerId?: string;
   onAddFinanceiro: (item: Omit<Financeiro, 'id'>) => Promise<string>;
   onUpdateFinanceiro: (id: string, item: Partial<Financeiro>) => Promise<void>;
@@ -20,7 +19,6 @@ interface FinanceiroViewProps {
 export default function FinanceiroView({
   financeiro,
   clientes,
-  assinaturasClientes = [],
   ownerId = '',
   onAddFinanceiro,
   onUpdateFinanceiro,
@@ -29,18 +27,6 @@ export default function FinanceiroView({
   companyName
 }: FinanceiroViewProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'caixa' | 'assinaturas'>('caixa');
-
-  // Customer Subscription Form Fields
-  const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
-  const [subClientId, setSubClientId] = useState('');
-  const [subCycle, setSubCycle] = useState<'Mensal' | 'Anual'>('Mensal');
-  const [subPaymentMethod, setSubPaymentMethod] = useState<'Pix' | 'Boleto' | 'Crédito'>('Pix');
-  const [subValue, setSubValue] = useState(0);
-  const [subDescription, setSubDescription] = useState('');
-  const [isSubmittingSubscription, setIsSubmittingSubscription] = useState(false);
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
-  const [isCancellingSubId, setIsCancellingSubId] = useState<string | null>(null);
 
   // Form Fields
   const [description, setDescription] = useState('');
@@ -165,82 +151,6 @@ export default function FinanceiroView({
     }
   };
 
-  const handleCreateSubscription = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!subClientId) return;
-    
-    const client = clientes.find(c => c.id === subClientId);
-    if (!client) return;
-
-    setIsSubmittingSubscription(true);
-    setSubscriptionError(null);
-
-    try {
-      const response = await fetch('/api/asaas/criar-assinatura-cliente', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          clientId: client.id,
-          clientName: client.companyName || client.name,
-          email: client.email,
-          cnpjCpf: client.cnpj || '',
-          paymentMethod: subPaymentMethod,
-          value: subValue,
-          cycle: subCycle,
-          description: subDescription,
-          ownerId: ownerId || ''
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro desconhecido ao configurar assinatura');
-      }
-
-      setIsSubscriptionOpen(false);
-      // Reset form
-      setSubClientId('');
-      setSubValue(0);
-      setSubDescription('');
-    } catch (err: any) {
-      setSubscriptionError(err.message || 'Ocorreu um erro ao processar a requisição.');
-    } finally {
-      setIsSubmittingSubscription(false);
-    }
-  };
-
-  const handleCancelSubscription = async (sub: ClienteAssinatura) => {
-    if (!confirm(`Deseja realmente cancelar a assinatura recorrente de ${sub.clientName} no Asaas?`)) {
-      return;
-    }
-    
-    setIsCancellingSubId(sub.id);
-    try {
-      const response = await fetch('/api/asaas/cancelar-assinatura-cliente', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          asaasSubscriptionId: sub.asaasSubscriptionId,
-          id: sub.id,
-          ownerId: ownerId || ''
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao cancelar assinatura no Asaas');
-      }
-    } catch (err: any) {
-      alert(err.message || 'Erro ao cancelar assinatura.');
-    } finally {
-      setIsCancellingSubId(null);
-    }
-  };
-
   const resetForm = () => {
     setDescription('');
     setType('Receber');
@@ -276,96 +186,54 @@ export default function FinanceiroView({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {activeTab === 'caixa' ? (
-            <>
-              <button
-                onClick={() => {
-                  const head = [['Data', 'Descrição', 'Cliente', 'Status', 'Valor']];
-                  const body = financeiro
-                    .sort((a, b) => b.date.localeCompare(a.date))
-                    .map((f) => [
-                      f.date.split('-').reverse().join('/'),
-                      f.description,
-                      f.clientName || 'Geral',
-                      f.status,
-                      formatBRL(f.value)
-                    ]);
-                  const summary = [
-                    { label: 'Recebido', value: formatBRL(totalReceived) },
-                    { label: 'Pendente', value: formatBRL(totalPending) },
-                    { label: 'Custos', value: formatBRL(totalCosts) },
-                    { label: 'Lucro Líquido', value: formatBRL(netProfit) }
-                  ];
-                  exportToPDF({ 
-                    title: 'LISTAGEM FINANCEIRA COMPLETA', 
-                    head, 
-                    body, 
-                    summary, 
-                    customLogo: customLogo || undefined,
-                    companyName: companyName || undefined 
-                  });
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
-              >
-                <FileDown size={14} /> Exportar
-              </button>
-              <button
-                onClick={() => {
-                  resetForm();
-                  setIsOpen(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-500/10 cursor-pointer"
-              >
-                <Plus size={14} /> Lançar Transação
-              </button>
-            </>
-          ) : (
+          <>
             <button
               onClick={() => {
-                setSubscriptionError(null);
-                setSubClientId('');
-                setSubValue(0);
-                setSubDescription('');
-                setIsSubscriptionOpen(true);
+                const head = [['Data', 'Descrição', 'Cliente', 'Status', 'Valor']];
+                const body = financeiro
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map((f) => [
+                    f.date.split('-').reverse().join('/'),
+                    f.description,
+                    f.clientName || 'Geral',
+                    f.status,
+                    formatBRL(f.value)
+                  ]);
+                const summary = [
+                  { label: 'Recebido', value: formatBRL(totalReceived) },
+                  { label: 'Pendente', value: formatBRL(totalPending) },
+                  { label: 'Custos', value: formatBRL(totalCosts) },
+                  { label: 'Lucro Líquido', value: formatBRL(netProfit) }
+                ];
+                exportToPDF({ 
+                  title: 'LISTAGEM FINANCEIRA COMPLETA', 
+                  head, 
+                  body, 
+                  summary, 
+                  customLogo: customLogo || undefined,
+                  companyName: companyName || undefined 
+                });
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
+            >
+              <FileDown size={14} /> Exportar
+            </button>
+            <button
+              onClick={() => {
+                resetForm();
+                setIsOpen(true);
               }}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-500/10 cursor-pointer"
             >
-              <Plus size={14} /> Configurar Assinatura
+              <Plus size={14} /> Lançar Transação
             </button>
-          )}
+          </>
         </div>
       </div>
 
-      {/* Tabs navigation */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800">
-        <button
-          onClick={() => setActiveTab('caixa')}
-          className={`pb-3 px-6 text-sm font-black transition-all ${
-            activeTab === 'caixa'
-              ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400'
-              : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
-        >
-          💰 Fluxo de Caixa
-        </button>
-        <button
-          onClick={() => setActiveTab('assinaturas')}
-          className={`pb-3 px-6 text-sm font-black transition-all flex items-center gap-2 ${
-            activeTab === 'assinaturas'
-              ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400'
-              : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
-        >
-          🔁 Assinaturas de Clientes (Asaas)
-          <span className="bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[10px] px-1.5 py-0.5 rounded-full font-black">
-            {(assinaturasClientes || []).filter(s => s.status === 'Ativa').length} Ativas
-          </span>
-        </button>
-      </div>
-
-      {activeTab === 'caixa' ? (
-        <>
-          {/* Recurring Reminders Alert */}
+      {/* Ledger Section */}
+      <div className="space-y-6">
+        {/* Recurring Reminders Alert */}
           <AnimatePresence>
             {recurringReminders.length > 0 && (
               <motion.div
@@ -646,475 +514,7 @@ export default function FinanceiroView({
               </div>
             </div>
           </div>
-        </>
-      ) : (
-        <div className="space-y-6">
-          <div className="bg-indigo-500/10 dark:bg-indigo-950/20 border border-indigo-500/20 p-4 rounded-2xl">
-            <h4 className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-2">
-              <RefreshCw size={14} className="animate-spin" /> Faturamento Automatizado via Asaas Sandbox
-            </h4>
-            <p className="text-[10px] text-slate-500 mt-1">
-              Configure recorrências automáticas para seus clientes (Mensal ou Anual). O Asaas irá gerar e enviar cobranças de Cartão de Crédito, Pix ou Boleto periodicamente.
-            </p>
-          </div>
-
-          {copiedText && (
-            <div className="bg-emerald-500/10 text-emerald-500 p-2 text-center rounded-lg text-[10px] font-bold">
-              ✓ Código copiado para a área de transferência!
-            </div>
-          )}
-
-          {assinaturasClientes.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-12 rounded-2xl text-center space-y-2">
-              <RefreshCw size={24} className="text-slate-300 mx-auto" />
-              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhuma assinatura ativa</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Cadastre e vincule sua primeira assinatura recorrente a um cliente clicando no botão "Configurar Assinatura" acima.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {assinaturasClientes.map((sub) => (
-                <div
-                  key={sub.id}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col justify-between space-y-4 hover:border-indigo-400/50 transition-all"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[9px] font-black uppercase bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full">
-                        {sub.cycle}
-                      </span>
-                      <h4 className="font-extrabold text-slate-900 dark:text-white mt-1.5 truncate max-w-[160px]" title={sub.clientName}>
-                        {sub.clientName}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 truncate max-w-[160px]">
-                        {sub.clientEmail}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-black font-mono text-indigo-600 dark:text-indigo-400">
-                        {formatBRL(sub.value)}
-                      </p>
-                      <span className={`inline-block text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
-                        sub.status === 'Ativa'
-                          ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600'
-                          : sub.status === 'Cancelada'
-                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                          : 'bg-amber-100 dark:bg-amber-950/40 text-amber-600'
-                      }`}>
-                        {sub.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-b border-slate-100 dark:border-slate-800 py-2 space-y-1 text-[10px] text-slate-500">
-                    <div className="flex justify-between">
-                      <span>Descrição:</span>
-                      <span className="font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[150px]">{sub.description}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Forma de Cobrança:</span>
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">{sub.paymentMethod}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Próximo Vencimento:</span>
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">
-                        {sub.nextDueDate ? sub.nextDueDate.split('-').reverse().join('/') : '-'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-50 dark:border-slate-800/50">
-                      <span>Asaas Sub ID:</span>
-                      <button
-                        onClick={() => copyToClipboard(sub.asaasSubscriptionId || '')}
-                        className="text-[9px] font-mono text-slate-400 hover:text-indigo-500 flex items-center gap-1 transition-colors"
-                      >
-                        {sub.asaasSubscriptionId?.slice(0, 12)}... <Copy size={10} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {sub.invoiceUrl && (
-                      <a
-                        href={sub.invoiceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-center font-bold text-[10px] transition-all flex items-center justify-center gap-1.5"
-                      >
-                        <ExternalLink size={11} /> Link de Pagamento
-                      </a>
-                    )}
-                    {sub.status === 'Ativa' && (
-                      <button
-                        disabled={isCancellingSubId === sub.id}
-                        onClick={() => handleCancelSubscription(sub)}
-                        className="p-1.5 bg-red-50 dark:bg-red-950/20 text-red-500 hover:bg-red-100 rounded-lg transition-all flex items-center justify-center cursor-pointer"
-                        title="Cancelar Assinatura"
-                      >
-                        {isCancellingSubId === sub.id ? (
-                          <RefreshCw size={13} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={13} />
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* DRAWER FORM */}
-      <AnimatePresence>
-        {isOpen && (
-          <div className="fixed inset-0 z-50 flex justify-end">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.6 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
-              className="fixed inset-0 bg-black/80"
-            />
-
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="relative w-full max-w-md bg-white dark:bg-slate-950 h-full shadow-2xl flex flex-col z-10 p-6 border-l border-slate-200 dark:border-slate-900 overflow-y-auto"
-            >
-              <div className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-900 mb-6">
-                <h3 className="text-md font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  Lançar Transação Financeira
-                </h3>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-lg text-slate-400 cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form onSubmit={handleSave} className="space-y-4 text-xs">
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Tipo de Lançamento</label>
-                  <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setType('Receber')}
-                      className={`py-1.5 font-bold rounded-md transition-all text-center cursor-pointer ${
-                        type === 'Receber'
-                          ? 'bg-white dark:bg-slate-800 text-emerald-500 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      🟢 Receita (Entrada)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setType('Pagar')}
-                      className={`py-1.5 font-bold rounded-md transition-all text-center cursor-pointer ${
-                        type === 'Pagar'
-                          ? 'bg-white dark:bg-slate-800 text-red-500 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      🔴 Despesa (Saída)
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Descrição Comercial *</label>
-                  <input
-                    type="text"
-                    required
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Ex: Parcela 2/4 - Projeto Automação IA"
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Valor (R$) *</label>
-                    <input
-                      type="number"
-                      required
-                      value={value}
-                      onChange={(e) => setValue(Number(e.target.value))}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Vencimento *</label>
-                    <input
-                      type="date"
-                      required
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Categoria</label>
-                    <select
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value as any)}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-bold text-xs"
-                    >
-                      <option value="Venda">🤝 Venda de Projeto</option>
-                      <option value="Mensalidade">🔁 Recorrência (SaaS)</option>
-                      <option value="Comissão">💸 Comissão Comercial</option>
-                      <option value="Custo">🏢 Custo de Operação / Infra</option>
-                      <option value="Outro">📝 Outros</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Status Inicial</label>
-                    <select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value as any)}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-bold text-xs"
-                    >
-                      <option value="Pendente">🟡 Pendente (A vencer)</option>
-                      <option value="Recebido">🟢 Recebido / Pago</option>
-                      <option value="Vencido">🔴 Vencido (Atrasado)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {status === 'Recebido' && (
-                  <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 p-4 rounded-xl space-y-3">
-                    <label className="block text-[10px] uppercase font-black text-emerald-600 dark:text-emerald-400">Meio de Pagamento Recebido</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {['Pix', 'Crédito', 'Débito', 'Boleto', 'Dinheiro'].map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setPaymentMethod(m as any)}
-                          className={`py-2 rounded-lg text-[10px] font-black uppercase transition-all ${
-                            paymentMethod === m
-                              ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                              : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                          }`}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Cliente Ativo *</label>
-                  <select
-                    required
-                    value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-bold text-xs"
-                  >
-                    <option value="">Selecione um cliente...</option>
-                    {clientes.filter(c => c.status === 'Ativo').map(cli => (
-                      <option key={cli.id} value={cli.companyName}>
-                        {cli.companyName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="pt-4 flex gap-3">
-                  <button
-                    type="submit"
-                    className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-all shadow-md shadow-indigo-500/10 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <span>Registrar Lançamento</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsOpen(false)}
-                    className="py-2.5 px-4 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-lg transition-all cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* SUBSCRIPTION DRAWER FORM */}
-      <AnimatePresence>
-        {isSubscriptionOpen && (
-          <div className="fixed inset-0 z-50 flex justify-end">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.6 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSubscriptionOpen(false)}
-              className="fixed inset-0 bg-black/80"
-            />
-
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="relative w-full max-w-md bg-white dark:bg-slate-950 h-full shadow-2xl flex flex-col z-10 p-6 border-l border-slate-200 dark:border-slate-900 overflow-y-auto"
-            >
-              <div className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-900 mb-6">
-                <div>
-                  <h3 className="text-md font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                    Configurar Assinatura Recorrente
-                  </h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Criar nova cobrança recorrente automatizada via Asaas</p>
-                </div>
-                <button
-                  onClick={() => setIsSubscriptionOpen(false)}
-                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-lg text-slate-400 cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {subscriptionError && (
-                <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 p-3 rounded-lg text-red-500 font-semibold mb-4 text-[10px]">
-                  ⚠️ {subscriptionError}
-                </div>
-              )}
-
-              <form onSubmit={handleCreateSubscription} className="space-y-4 text-xs">
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Cliente Vinculado *</label>
-                  <select
-                    required
-                    value={subClientId}
-                    onChange={(e) => setSubClientId(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-bold text-xs"
-                  >
-                    <option value="">Selecione o cliente de destino...</option>
-                    {clientes.filter(c => c.status === 'Ativo').map(cli => (
-                      <option key={cli.id} value={cli.id}>
-                        {cli.companyName} ({cli.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Frequência / Recorrência *</label>
-                  <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setSubCycle('Mensal')}
-                      className={`py-1.5 font-bold rounded-md transition-all text-center cursor-pointer ${
-                        subCycle === 'Mensal'
-                          ? 'bg-white dark:bg-slate-800 text-indigo-500 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      🔄 Mensal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSubCycle('Anual')}
-                      className={`py-1.5 font-bold rounded-md transition-all text-center cursor-pointer ${
-                        subCycle === 'Anual'
-                          ? 'bg-white dark:bg-slate-800 text-indigo-500 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      📅 Anual
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Forma de Cobrança *</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['Pix', 'Boleto', 'Crédito'] as const).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setSubPaymentMethod(m)}
-                        className={`py-2 rounded-lg text-[10px] font-black uppercase transition-all ${
-                          subPaymentMethod === m
-                            ? 'bg-indigo-500 text-white shadow-lg'
-                            : 'bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800 hover:bg-slate-100'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                  {subPaymentMethod === 'Crédito' && (
-                    <p className="text-[9px] text-indigo-500 dark:text-indigo-400 mt-1 font-medium italic">
-                      ℹ️ O cliente receberá o link para registrar seu cartão e as cobranças ocorrerão de forma totalmente automática.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Valor da Parcela (R$) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={subValue}
-                    onChange={(e) => setSubValue(Number(e.target.value))}
-                    placeholder="0,00"
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-mono font-bold text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Descrição Comercial *</label>
-                  <input
-                    type="text"
-                    required
-                    value={subDescription}
-                    onChange={(e) => setSubDescription(e.target.value)}
-                    placeholder="Ex: Licença SaaS ERP - Plano Startup"
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none"
-                  />
-                </div>
-
-                <div className="pt-4 flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={isSubmittingSubscription}
-                    className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-bold rounded-lg transition-all shadow-md flex items-center justify-center gap-2"
-                  >
-                    {isSubmittingSubscription ? (
-                      <>
-                        <RefreshCw size={14} className="animate-spin" />
-                        <span>Configurando no Asaas...</span>
-                      </>
-                    ) : (
-                      <span>Ativar Assinatura Recorrente</span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsSubscriptionOpen(false)}
-                    className="py-2.5 px-4 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-lg transition-all cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </div>
 
       <ConfirmModal
         isOpen={!!itemToDelete}

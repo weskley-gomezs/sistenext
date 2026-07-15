@@ -67,6 +67,7 @@ export default function EquipeView({
   const [phone, setPhone] = useState('');
   const [commissionRate, setCommissionRate] = useState<number>(5);
   const [salesGoal, setSalesGoal] = useState<number>(0);
+  const [phoneGoal, setPhoneGoal] = useState<number>(0);
   const [status, setStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
 
   const getRegistrationTime = (createdAtString: string) => {
@@ -116,7 +117,8 @@ export default function EquipeView({
           phone,
           status,
           commissionRate,
-          salesGoal: salesGoal || 0
+          salesGoal: salesGoal || 0,
+          phoneGoal: phoneGoal || 0
         };
         await onUpdateMembro(editingMembro.id, payload);
       } else {
@@ -129,6 +131,7 @@ export default function EquipeView({
           status,
           commissionRate,
           salesGoal: salesGoal || 0,
+          phoneGoal: phoneGoal || 0,
           createdAt: new Date().toISOString()
         };
         await onAddMembro(payload);
@@ -149,6 +152,7 @@ export default function EquipeView({
     setPhone('');
     setCommissionRate(5);
     setSalesGoal(0);
+    setPhoneGoal(0);
     setStatus('Ativo');
   };
 
@@ -161,6 +165,7 @@ export default function EquipeView({
     setPhone(membro.phone || '');
     setCommissionRate(membro.commissionRate || 0);
     setSalesGoal(membro.salesGoal || 0);
+    setPhoneGoal(membro.phoneGoal || 0);
     setStatus(membro.status);
     setIsFormOpen(true);
   };
@@ -339,7 +344,8 @@ export default function EquipeView({
                       <th className="p-4">Cargo</th>
                       <th className="p-4">Telefone</th>
                       <th className="p-4">Comissão</th>
-                      <th className="p-4">Meta de Vendas</th>
+                      <th className="p-4">Meta Vendas</th>
+                      <th className="p-4">Meta Fone</th>
                       <th className="p-4 text-center">Status</th>
                       <th className="p-4 text-right">Ações</th>
                     </tr>
@@ -401,6 +407,9 @@ export default function EquipeView({
                             </td>
                             <td className="p-4 text-slate-700 dark:text-slate-200 font-extrabold font-mono">
                               {formatBRL(membro.salesGoal || 0)}
+                            </td>
+                            <td className="p-4 text-slate-700 dark:text-slate-200 font-extrabold font-mono">
+                              {membro.phoneGoal || 0}
                             </td>
                             <td className="p-4 text-center">
                               <button
@@ -740,6 +749,34 @@ export default function EquipeView({
                   </div>
 
                   <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Status Inicial</label>
+                    <div className="flex gap-4 h-9 items-center">
+                      <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 font-bold cursor-pointer">
+                        <input
+                          type="radio"
+                          name="status"
+                          checked={status === 'Ativo'}
+                          onChange={() => setStatus('Ativo')}
+                          className="text-indigo-600"
+                        />
+                        Ativo
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 font-bold cursor-pointer">
+                        <input
+                          type="radio"
+                          name="status"
+                          checked={status === 'Inativo'}
+                          onChange={() => setStatus('Inativo')}
+                          className="text-indigo-600"
+                        />
+                        Inativo
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase">Meta de Vendas (R$)</label>
                     <input
                       type="number"
@@ -748,6 +785,18 @@ export default function EquipeView({
                       onChange={(e) => setSalesGoal(Number(e.target.value))}
                       placeholder="Ex: 50000"
                       className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-800 dark:text-slate-200 focus:outline-none font-mono font-bold text-indigo-600 dark:text-indigo-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Meta de Ligações</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={phoneGoal}
+                      onChange={(e) => setPhoneGoal(Number(e.target.value))}
+                      placeholder="Ex: 200"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-800 dark:text-slate-200 focus:outline-none font-mono font-bold text-emerald-600 dark:text-emerald-400"
                     />
                   </div>
                 </div>
@@ -762,32 +811,6 @@ export default function EquipeView({
                     placeholder={editingMembro ? "Deixe em branco para manter a atual" : "Defina uma senha de acesso"}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
                   />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Status Inicial</label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 font-bold">
-                      <input
-                        type="radio"
-                        name="status"
-                        checked={status === 'Ativo'}
-                        onChange={() => setStatus('Ativo')}
-                        className="text-indigo-600"
-                      />
-                      Ativo
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 font-bold">
-                      <input
-                        type="radio"
-                        name="status"
-                        checked={status === 'Inativo'}
-                        onChange={() => setStatus('Inativo')}
-                        className="text-indigo-600"
-                      />
-                      Inativo
-                    </label>
-                  </div>
                 </div>
 
                 <div className="pt-4 flex justify-end gap-3">
