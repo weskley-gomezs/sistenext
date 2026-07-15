@@ -321,3 +321,27 @@ export interface MembroEquipe {
   createdAt: string;
 }
 
+export interface OportunidadeColumn {
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'boolean';
+}
+
+export interface OportunidadeRow {
+  id: string;
+  empresa: string;
+  telefone: string;
+  contato: boolean;
+  [key: string]: any;
+}
+
+export interface Oportunidade {
+  id: string;
+  ownerId: string;
+  name: string;
+  columns: OportunidadeColumn[];
+  rows: OportunidadeRow[];
+  createdAt: string;
+}
+
+

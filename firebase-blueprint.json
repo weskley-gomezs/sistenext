@@ -276,6 +276,20 @@
         "paymentId": { "type": "string" }
       },
       "required": ["id", "clientId", "clientName", "clientEmail", "value", "cycle", "paymentMethod", "status"]
+    },
+    "Oportunidade": {
+      "title": "Oportunidade",
+      "description": "Dynamic excel-style sheets for sales opportunities containing standard and custom columns",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "columns": { "type": "array" },
+        "rows": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "name", "columns", "rows", "createdAt"]
     }
   },
   "firestore": {
@@ -334,6 +348,10 @@
     "assinaturas_clientes": {
       "schema": { "$ref": "#/entities/ClienteAssinatura" },
       "description": "Collection of customer recurring subscription billing settings"
+    },
+    "oportunidades": {
+      "schema": { "$ref": "#/entities/Oportunidade" },
+      "description": "Collection of spreadsheet-style opportunity lists"
     }
   }
 }

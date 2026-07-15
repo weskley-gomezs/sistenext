@@ -24,7 +24,8 @@ import {
   FollowUp,
   MembroEquipe,
   Log,
-  ClienteAssinatura
+  ClienteAssinatura,
+  Oportunidade
 } from './types';
 
 // Components
@@ -46,6 +47,7 @@ import AnotacoesView from './components/AnotacoesView';
 import DocumentosView from './components/DocumentosView';
 import ConfiguracoesView from './components/ConfiguracoesView';
 import EquipeView from './components/EquipeView';
+import OportunidadesView from './components/OportunidadesView';
 
 // Simple Chronological Timeline of all Follow-ups across the system
 import { History, CalendarClock, User } from 'lucide-react';
@@ -147,6 +149,7 @@ export default function App() {
   const [membros, setMembros] = useState<MembroEquipe[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
   const [config, setConfig] = useState<any>(null);
+  const [oportunidades, setOportunidades] = useState<Oportunidade[]>([]);
 
   const currentUserEmail = user?.email?.toLowerCase() || '';
   const currentMember = membros.find(m => m.email?.toLowerCase() === currentUserEmail);
@@ -427,6 +430,7 @@ export default function App() {
       subscribeToCollection<Documento>('documentos', ownerId, setDocumentos),
       subscribeToCollection<MembroEquipe>('equipe', ownerId, setMembros),
       subscribeToCollection<Log>('logs', ownerId, setLogs),
+      subscribeToCollection<Oportunidade>('oportunidades', ownerId, setOportunidades),
       onSnapshot(doc(db, 'configuracoes', ownerId), (snapshot) => {
         if (snapshot.exists()) {
           setConfig(snapshot.data() as any);
@@ -934,6 +938,27 @@ export default function App() {
             currentUserEmail={user?.email || 'Vendedor'}
           />
         );
+      case 'oportunidade':
+        return (
+          <OportunidadesView
+            oportunidades={oportunidades}
+            membros={membros}
+            config={config}
+            user={user}
+            onAddOportunidade={(payload) => {
+              if (!user?.ownerId) return Promise.reject('No ownerId');
+              return addItem('oportunidades', { ...payload, ownerId: user.ownerId }, user.ownerId);
+            }}
+            onUpdateOportunidade={(id, payload) => {
+              if (!user?.ownerId) return Promise.resolve();
+              return updateItem('oportunidades', id, payload, user.ownerId);
+            }}
+            onDeleteOportunidade={(id, justification, data) => {
+              if (!user?.ownerId) return Promise.resolve();
+              return deleteItemWithJustification('oportunidades', id, data, justification, user.ownerId);
+            }}
+          />
+        );
       case 'configuracoes':
         return (
           <ConfiguracoesView
@@ -964,6 +989,11 @@ export default function App() {
     }
   };
 
+  const pendingOportunidadesCount = oportunidades.reduce((acc, sheet) => {
+    const count = (sheet.rows || []).filter(row => !row.contato).length;
+    return acc + count;
+  }, 0);
+
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
       <Sidebar
@@ -975,6 +1005,7 @@ export default function App() {
         setDarkMode={setDarkMode}
         isVendedor={isVendedor}
         activeSubscription={config?.activeSubscription}
+        pendingOportunidadesCount={pendingOportunidadesCount}
       />
 
       <NotificationManager agenda={agenda} />

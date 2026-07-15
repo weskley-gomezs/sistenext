@@ -24,7 +24,8 @@ import {
   CheckCircle2,
   ChevronsLeft,
   ChevronsRight,
-  FileDown
+  FileDown,
+  Grid
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 const nexusErpLogo = 'https://i.imgur.com/BewcRiJ.png';
@@ -44,7 +45,8 @@ export type ActiveSection =
   | 'documentos'
   | 'relatorios'
   | 'equipe'
-  | 'configuracoes';
+  | 'configuracoes'
+  | 'oportunidade';
 
 interface SidebarProps {
   activeSection: ActiveSection;
@@ -55,6 +57,7 @@ interface SidebarProps {
   setDarkMode: (dark: boolean) => void;
   isVendedor?: boolean;
   activeSubscription?: any;
+  pendingOportunidadesCount?: number;
 }
 
 export default function Sidebar({
@@ -65,7 +68,8 @@ export default function Sidebar({
   darkMode,
   setDarkMode,
   isVendedor = false,
-  activeSubscription
+  activeSubscription,
+  pendingOportunidadesCount = 0
 }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -82,6 +86,7 @@ export default function Sidebar({
   const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'leads', label: 'Leads (Pipeline)', icon: Target },
+    { id: 'oportunidade', label: 'Oportunidades', icon: Grid },
     { id: 'empresas', label: 'Empresas', icon: Building2 },
     { id: 'clientes', label: 'Clientes Ativos', icon: Users },
     { id: 'propostas', label: 'Propostas', icon: FileText },
@@ -204,7 +209,14 @@ export default function Sidebar({
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <Icon size={18} className={isActive ? 'text-indigo-400' : 'text-slate-400'} />
+                        <div className="relative">
+                          <Icon size={18} className={isActive ? 'text-indigo-400' : 'text-slate-400'} />
+                          {item.id === 'oportunidade' && pendingOportunidadesCount > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-extrabold text-white shadow-sm ring-2 ring-slate-900">
+                              {pendingOportunidadesCount}
+                            </span>
+                          )}
+                        </div>
                         <span>{item.label}</span>
                       </div>
                       {item.badge && (
@@ -298,7 +310,14 @@ export default function Sidebar({
                 title={isCollapsed ? item.label : undefined}
               >
                 <div className="flex items-center gap-3">
-                  <Icon size={18} className={isActive ? 'text-indigo-400' : 'text-slate-400'} />
+                  <div className="relative">
+                    <Icon size={18} className={isActive ? 'text-indigo-400' : 'text-slate-400'} />
+                    {item.id === 'oportunidade' && pendingOportunidadesCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-extrabold text-white shadow-sm ring-2 ring-slate-900">
+                        {pendingOportunidadesCount}
+                      </span>
+                    )}
+                  </div>
                   {!isCollapsed && <span className="truncate">{item.label}</span>}
                 </div>
                 {!isCollapsed && item.badge && (
