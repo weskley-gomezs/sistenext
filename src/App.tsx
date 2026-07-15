@@ -263,7 +263,10 @@ export default function App() {
       role: 'Administrador',
       status: 'Ativo',
       createdAt: user.metadata?.creationTime || new Date().toISOString(),
-      phone: user.phone || ''
+      phone: user.phone || '',
+      commissionRate: user.commissionRate || 0,
+      salesGoal: user.salesGoal || 0,
+      phoneGoal: user.phoneGoal || 0
     };
 
     if (user.ownerId === user.uid) {
@@ -331,7 +334,10 @@ export default function App() {
               name: profileData.name || firebaseUser.displayName || 'Usuário',
               phone: profileData.phone,
               taxId: profileData.taxId,
-              companyName: profileData.companyName
+              companyName: profileData.companyName,
+              commissionRate: profileData.commissionRate || 0,
+              salesGoal: profileData.salesGoal || 0,
+              phoneGoal: profileData.phoneGoal || 0
             });
           } else {
             // If profile doesn't exist, check if user was invited as a team member

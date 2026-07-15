@@ -317,6 +317,7 @@ export interface MembroEquipe {
   status: 'Ativo' | 'Inativo';
   commissionRate?: number;
   salesGoal?: number;
+  phoneGoal?: number;
   createdAt: string;
 }
 
