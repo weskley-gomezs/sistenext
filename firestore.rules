@@ -7,10 +7,10 @@ service cloud.firestore {
     }
     
     function isAuthorized(ownerId) {
-      let profilePath = /databases/$(database)/documents/user_profiles/$(request.auth.uid);
-      return ownerId != null && (
+      return request.auth != null && ownerId != null && (
         request.auth.uid == ownerId || 
-        (exists(profilePath) && get(profilePath).data.ownerId == ownerId)
+        (exists(/databases/$(database)/documents/user_profiles/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data.ownerId == ownerId)
       );
     }
 
@@ -21,27 +21,34 @@ service cloud.firestore {
 
     // User Profiles: Users can read/write their own profile
     match /user_profiles/{userId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow get: if isAuthenticated() && request.auth.uid == userId;
+      allow list: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // Equipe: Security hardened lookup by email or organization authority
     match /equipe/{id} {
-      allow read: if isAuthenticated() && (
-        request.auth.token.email == resource.data.email || 
-        isAuthorized(resource.data.ownerId)
+      allow get: if resource == null || (
+        isAuthenticated() && (
+          request.auth.token.email == resource.data.email || 
+          isAuthorized(resource.data.ownerId)
+        )
       );
+      allow list: if true;
       allow write: if isAuthenticated() && isAuthorized(request.resource.data.ownerId);
     }
 
     // Configurations: Keyed by ownerId
     match /configuracoes/{ownerId} {
-      allow read: if isAuthenticated() && isAuthorized(ownerId);
+      allow get: if isAuthenticated() && isAuthorized(ownerId);
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && isAuthorized(ownerId);
     }
 
     // Application Collections: Strictly isolated by ownerId
     match /leads/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -49,7 +56,8 @@ service cloud.firestore {
     }
 
     match /empresas/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -57,7 +65,8 @@ service cloud.firestore {
     }
 
     match /clientes/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -65,7 +74,8 @@ service cloud.firestore {
     }
 
     match /projetos/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -73,7 +83,8 @@ service cloud.firestore {
     }
 
     match /propostas/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -81,7 +92,8 @@ service cloud.firestore {
     }
 
     match /contratos/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -89,7 +101,8 @@ service cloud.firestore {
     }
 
     match /financeiro/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -97,7 +110,8 @@ service cloud.firestore {
     }
 
     match /agenda/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -105,7 +119,8 @@ service cloud.firestore {
     }
 
     match /follow_ups/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -113,7 +128,8 @@ service cloud.firestore {
     }
 
     match /anotacoes/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -121,7 +137,8 @@ service cloud.firestore {
     }
 
     match /documentos/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -129,7 +146,8 @@ service cloud.firestore {
     }
 
     match /logs/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -137,7 +155,8 @@ service cloud.firestore {
     }
 
     match /assinaturas_clientes/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
@@ -145,7 +164,8 @@ service cloud.firestore {
     }
 
     match /oportunidades/{id} {
-      allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
