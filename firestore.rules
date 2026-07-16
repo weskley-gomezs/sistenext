@@ -3,14 +3,15 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Helper functions
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null && request.auth.uid != null;
     }
     
     function isAuthorized(ownerId) {
       let profilePath = /databases/$(database)/documents/user_profiles/$(request.auth.uid);
-      return ownerId == null || 
-             request.auth.uid == ownerId || 
-             (exists(profilePath) && get(profilePath).data.ownerId == ownerId);
+      return ownerId != null && (
+        request.auth.uid == ownerId || 
+        (exists(profilePath) && get(profilePath).data.ownerId == ownerId)
+      );
     }
 
     // Default deny catch-all
@@ -23,9 +24,12 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Equipe: Special rule for member lookup by email (used in login/signup)
+    // Equipe: Security hardened lookup by email or organization authority
     match /equipe/{id} {
-      allow read: if true; // Allow lookup for login
+      allow read: if isAuthenticated() && (
+        request.auth.token.email == resource.data.email || 
+        isAuthorized(resource.data.ownerId)
+      );
       allow write: if isAuthenticated() && isAuthorized(request.resource.data.ownerId);
     }
 
@@ -35,7 +39,7 @@ service cloud.firestore {
       allow write: if isAuthenticated() && isAuthorized(ownerId);
     }
 
-    // Application Collections: Restricted by ownerId
+    // Application Collections: Strictly isolated by ownerId
     match /leads/{id} {
       allow read: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
       allow write: if isAuthenticated() && (

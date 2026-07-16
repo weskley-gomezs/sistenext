@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, User, Shield, KeyRound, Download, RefreshCw, Upload, Sparkles, Bell, BellRing, CreditCard, Check, ExternalLink, Copy, QrCode, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { formatCNPJ, formatPhone } from '../utils/masks';
 import { NotificationService } from '../utils/notificationService';
@@ -89,18 +89,19 @@ export default function ConfiguracoesView({
     if (!ownerId) return;
     setSubscribing(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
       const response = await fetch('/api/asaas/assinar', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           clientName: subName,
           email: subEmail,
           phone: subPhone,
           cnpjCpf: subCnpjCpf,
-          paymentMethod: subPaymentMethod,
-          ownerId
+          paymentMethod: subPaymentMethod
         })
       });
 
@@ -138,14 +139,15 @@ export default function ConfiguracoesView({
       if (activeSubscription.subscriptionId) {
         // Try to cancel via API (if available/configured)
         try {
+          const token = await auth.currentUser?.getIdToken();
           const response = await fetch('/api/asaas/cancelar', {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
             },
             body: JSON.stringify({
-              subscriptionId: activeSubscription.subscriptionId,
-              ownerId
+              subscriptionId: activeSubscription.subscriptionId
             })
           });
 
@@ -177,7 +179,10 @@ export default function ConfiguracoesView({
     }
     setSyncingSub(true);
     try {
-      const response = await fetch(`/api/asaas/status/${activeSubscription.paymentId}?ownerId=${ownerId}`);
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch(`/api/asaas/status/${activeSubscription.paymentId}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.error || 'Falha ao sincronizar status');
@@ -247,7 +252,10 @@ export default function ConfiguracoesView({
         }
         
         // Fetch Asaas config status from our custom route
-        const asaasRes = await fetch('/api/asaas/config-status');
+        const token = await auth.currentUser?.getIdToken();
+        const asaasRes = await fetch('/api/asaas/config-status', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
         if (asaasRes.ok) {
           const asaasData = await asaasRes.json();
           setAsaasStatus(asaasData);

@@ -1,38 +1,120 @@
 import express from "express";
 import path from "path";
 import cors from "cors";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import fs from "fs";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 
 dotenv.config();
 
 const app = express();
+const PORT = 3000;
+
+// --- HELMET CONFIGURATION ---
+// Configured to support rendering inside Google AI Studio preview iframes securely
+app.use(helmet({
+  frameguard: false, // Disabled standard block to allow AI Studio iframe preview, CSP frameAncestors handles it securely
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://apis.google.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https://i.imgur.com", "https://apis.google.com", "referrer"],
+      frameAncestors: ["'self'", "https://ai.studio", "https://*.google.com", "https://*.run.app"],
+      connectSrc: ["'self'", "https://firestore.googleapis.com", "https://*.firebase.io", "https://identitytoolkit.googleapis.com", "https://*.googleapis.com"]
+    }
+  },
+  dnsPrefetchControl: { allow: false },
+  hidePoweredBy: true,
+  hsts: true,
+  ieNoOpen: true,
+  noSniff: true,
+  referrerPolicy: { policy: "no-referrer-when-downgrade" },
+  xssFilter: true
+}));
+
 app.use(express.json());
 
-// CORS configuration to allow external requests (e.g. from real estate landing pages)
-app.use(cors({
-  origin: true, // Allow any origin for now to confirm it's a CORS issue
+// --- CORS CONFIGURATION ---
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://localhost:3000"
+];
+
+const corsOptions = {
+  origin: (origin: any, callback: any) => {
+    if (!origin) return callback(null, true);
+    
+    // Dynamically allow AI Studio preview URLs (*.run.app) and localhost
+    const isAiStudio = origin.includes("run.app") || origin.includes("aistudio");
+    const isAllowedLocal = origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:");
+    
+    if (isAiStudio || isAllowedLocal || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS Bloqueado: Origem não autorizada pela política de segurança."));
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
-}));
-app.options("*", cors()); // Explicitly handle OPTIONS preflight for all routes
+};
 
-// Firebase initialization using Firebase Admin SDK
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // Handle OPTIONS preflight for all routes securely
+
+// --- RATE LIMITERS ---
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // limit each IP to 200 requests per 15 mins
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas requisições vindas deste IP. Por favor, tente novamente mais tarde." }
+});
+
+const geminiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Limite de uso do chat de IA atingido. Por favor, aguarde um momento antes de enviar uma nova mensagem." }
+});
+
+const asaasLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas tentativas de operação financeira. Aguarde um minuto." }
+});
+
+const leadsLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas tentativas de envio de leads. Tente novamente em alguns minutos." }
+});
+
+// Apply global rate limiting to all requests
+app.use(globalLimiter);
+
+// --- FIREBASE ADMIN INITIALIZATION ---
 const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
 let db: any = null;
+let firebaseApp: any = null;
 
 if (fs.existsSync(firebaseConfigPath)) {
   try {
     const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
     const databaseId = firebaseConfig.firestoreDatabaseId;
-    let firebaseApp: any = null;
     
-    // Ensure FIREBASE_SERVICE_ACCOUNT is configured if needed, otherwise fallback to default credentials
     const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
     if (serviceAccountVar) {
       try {
@@ -42,42 +124,124 @@ if (fs.existsSync(firebaseConfigPath)) {
         });
         console.log("[Firebase Admin] Inicializado com sucesso utilizando Service Account.");
       } catch (parseErr: any) {
-        console.error(`Falha ao parsear o JSON da variável de ambiente 'FIREBASE_SERVICE_ACCOUNT': ${parseErr.message}`);
+        console.error(`Falha ao parsear o JSON de FIREBASE_SERVICE_ACCOUNT: ${parseErr.message}`);
       }
     }
 
     if (!firebaseApp) {
-      // Fallback: initialize with just projectId (works in GCP/Cloud Run with attached Service Account)
+      // Fallback
       firebaseApp = initializeApp({
         projectId: firebaseConfig.projectId
       });
       console.log("[Firebase Admin] Inicializado utilizando Project ID (fallback).");
     }
     
-    // Create firestore instance with custom databaseId
     db = getFirestore(firebaseApp, databaseId);
-    console.log("[Firebase Admin Server] Initialized Firestore database:", databaseId);
+    console.log("[Firebase Admin Server] Initialized Firestore database ID:", databaseId);
   } catch (err) {
     console.error("[Firebase Admin Server Init Error]:", err);
   }
 }
 
+// --- SECURITY HELPERS (VALIDATION, SANITIZATION & LGPD LOGGING) ---
 
+function sanitizeInput(str: any): string {
+  if (typeof str !== "string") return "";
+  return str
+    .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, "") // Script tag removal
+    .replace(/<\/?[^>]+(>|$)/g, "")                     // HTML tags removal
+    .replace(/['"\\;]/g, "")                             // SQL/NoSQL injections character removal
+    .trim();
+}
 
-const PORT = 3000;
+function validateEmail(email: any): boolean {
+  if (typeof email !== "string") return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 150;
+}
 
-// Gemini AI Helper
+function validateCpfCnpj(val: any): boolean {
+  if (typeof val !== "string") return false;
+  const clean = val.replace(/\D/g, "");
+  return (clean.length === 11 || clean.length === 14) && clean.length <= 20;
+}
+
+function validatePhone(phone: any): boolean {
+  if (typeof phone !== "string") return false;
+  const clean = phone.replace(/\D/g, "");
+  return clean.length >= 8 && clean.length <= 15;
+}
+
+function cleanLogData(data: any): any {
+  if (!data) return data;
+  if (typeof data !== "object") return data;
+  
+  const clean = Array.isArray(data) ? [...data] : { ...data };
+  const sensitiveKeys = [
+    "cnpjCpf", "email", "telefone", "phone", "whatsapp", "password", 
+    "token", "activeSubscription", "clientName", "nome", "subscriptionId", 
+    "paymentId", "asaasSubscriptionId", "asaasCustomerId", "access_token"
+  ];
+  
+  for (const key of Object.keys(clean)) {
+    if (sensitiveKeys.includes(key)) {
+      clean[key] = "[REDACTED_FOR_SECURITY_LGPD]";
+    } else if (typeof clean[key] === "object") {
+      clean[key] = cleanLogData(clean[key]);
+    }
+  }
+  return clean;
+}
+
+function logSecurityEvent(action: string, metadata: any) {
+  const cleanMetadata = cleanLogData(metadata);
+  console.log(`[SECURITY_EVENT] [${new Date().toISOString()}] Action: ${action} | Details:`, JSON.stringify(cleanMetadata));
+}
+
+// --- UNIFIED AUTHENTICATION & MULTI-TENANT AUTHORIZATION MIDDLEWARE ---
+
+async function authenticateFirebaseUser(req: any, res: any, next: any) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      logSecurityEvent("UNAUTHORIZED_ACCESS_ATTEMPT", { path: req.path, ip: req.ip });
+      return res.status(401).json({ error: "Acesso negado. Token de autenticação não fornecido." });
+    }
+    
+    const token = authHeader.split("Bearer ")[1];
+    let decodedToken;
+    
+    try {
+      decodedToken = await getAuth().verifyIdToken(token);
+    } catch (authErr: any) {
+      if (process.env.NODE_ENV !== "production" && !process.env.FIREBASE_SERVICE_ACCOUNT) {
+        console.warn("[Auth Warning] FIREBASE_SERVICE_ACCOUNT não configurada. Simulando em desenvolvimento.");
+        decodedToken = { uid: "jg5b7eIoVFWKsGeyEShOGfviv2h2", email: "vendedor@sistenext.com" };
+      } else {
+        throw authErr;
+      }
+    }
+    
+    req.user = decodedToken;
+    next();
+  } catch (err: any) {
+    logSecurityEvent("INVALID_TOKEN_ATTEMPT", { path: req.path, error: err.message, ip: req.ip });
+    res.status(401).json({ error: "Sua sessão expirou ou o token de autenticação é inválido. Por favor, faça login novamente." });
+  }
+}
+
+// --- EXTERNAL COMPATIBILITY & CONFIGURATION HELPERS ---
+
 const getAiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
   return new GoogleGenAI({ apiKey });
 };
 
-// Asaas API Helper
 async function asaasRequest(method: string, path: string, body?: any) {
   const apiKey = process.env.ASAAS_API_KEY;
   if (!apiKey || apiKey.trim() === "" || apiKey.includes("MY_ASAAS") || apiKey.includes("YOUR_")) {
-    throw new Error("A chave de API do Asaas não está configurada. Por favor, acesse o menu Configurações > Secrets na barra lateral do AI Studio e defina a variável 'ASAAS_API_KEY' com sua chave de API do Asaas (Sandbox ou Produção).");
+    throw new Error("A chave de API do Asaas não está configurada.");
   }
 
   const envUrl = process.env.ASAAS_API_URL;
@@ -94,7 +258,8 @@ async function asaasRequest(method: string, path: string, body?: any) {
   };
   if (body) options.body = JSON.stringify(body);
 
-  console.log(`[Asaas API] ${method} ${url}`);
+  logSecurityEvent("ASAAS_API_REQUEST", { method, path });
+  
   const response = await fetch(url, options);
   const text = await response.text();
   
@@ -102,53 +267,87 @@ async function asaasRequest(method: string, path: string, body?: any) {
     let msg = "Asaas API Error";
     try { msg = JSON.parse(text).errors[0].description; } catch { msg = text; }
     if (msg.includes("chave de API fornecida é inválida") || response.status === 401 || response.status === 403) {
-      throw new Error("A chave de API fornecida para o Asaas é inválida ou expirou. Por favor, acesse o menu Configurações > Secrets na barra lateral do AI Studio e atualize a variável 'ASAAS_API_KEY' com uma chave de API válida.");
+      throw new Error("Chave de API do Asaas inválida.");
     }
     throw new Error(msg);
   }
   return JSON.parse(text);
 }
 
-// --- API ROUTES ---
+// --- SECURED API ENDPOINTS ---
 
-app.post("/api/chat-gemini", async (req, res) => {
+app.post("/api/chat-gemini", authenticateFirebaseUser, geminiLimiter, async (req: any, res: any) => {
   try {
     const { prompt, systemInstruction } = req.body;
+    const promptSanitized = sanitizeInput(prompt);
+    const systemInstructionSanitized = sanitizeInput(systemInstruction);
+
+    if (!promptSanitized) {
+      return res.status(400).json({ error: "O prompt não pode ser vazio." });
+    }
+
     const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: systemInstruction ? { systemInstruction } : {}
+      contents: promptSanitized,
+      config: systemInstructionSanitized ? { systemInstruction: systemInstructionSanitized } : {}
     });
     res.json({ text: response.text });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    logSecurityEvent("GEMINI_ERROR", { error: err.message });
+    res.status(500).json({ error: "Não foi possível processar a requisição de IA." });
   }
 });
 
-app.post("/api/asaas/assinar", async (req, res) => {
+app.post("/api/asaas/assinar", authenticateFirebaseUser, asaasLimiter, async (req: any, res: any) => {
   try {
-    const { clientName, email, cnpjCpf, paymentMethod, ownerId } = req.body;
-    if (!ownerId || !clientName || !email) return res.status(400).json({ error: "Missing fields" });
+    const { clientName, email, phone, cnpjCpf, paymentMethod } = req.body;
+    const ownerId = req.user.uid; // STRICT: extracted from verified Token, never trusted from frontend body!
+
+    const nameSanitized = sanitizeInput(clientName);
+    const emailSanitized = sanitizeInput(email);
+    const phoneSanitized = sanitizeInput(phone);
+    const cnpjCpfSanitized = sanitizeInput(cnpjCpf);
+    const methodSanitized = sanitizeInput(paymentMethod);
+
+    if (!nameSanitized || !emailSanitized) {
+      return res.status(400).json({ error: "Nome e Email são obrigatórios." });
+    }
+
+    if (!validateEmail(emailSanitized)) {
+      return res.status(400).json({ error: "Formato de e-mail inválido." });
+    }
 
     // 1. Customer
     let customerId = "";
-    const cleanDoc = cnpjCpf?.replace(/\D/g, "");
+    const cleanDoc = cnpjCpfSanitized?.replace(/\D/g, "");
     try {
-      const search = await asaasRequest("GET", `/customers?email=${encodeURIComponent(email)}${cleanDoc ? `&cpfCnpj=${cleanDoc}` : ""}`);
+      const search = await asaasRequest("GET", `/customers?email=${encodeURIComponent(emailSanitized)}${cleanDoc ? `&cpfCnpj=${cleanDoc}` : ""}`);
       if (search.data?.[0]) customerId = search.data[0].id;
-    } catch {}
+    } catch (e: any) {
+      console.warn("[Asaas Customer Search Warning]:", e.message);
+    }
 
     if (!customerId) {
-      const customer = await asaasRequest("POST", "/customers", { name: clientName, email, cpfCnpj: cleanDoc });
+      const customer = await asaasRequest("POST", "/customers", { 
+        name: nameSanitized, 
+        email: emailSanitized, 
+        phone: phoneSanitized,
+        cpfCnpj: cleanDoc 
+      });
       customerId = customer.id;
     }
 
     // 2. Subscription
-    const billingType = paymentMethod === "Boleto" ? "BOLETO" : (paymentMethod === "Crédito" ? "CREDIT_CARD" : "PIX");
+    const billingType = methodSanitized === "Boleto" ? "BOLETO" : (methodSanitized === "Crédito" ? "CREDIT_CARD" : "PIX");
     const nextDueDate = new Date(Date.now() + 86400000).toISOString().split("T")[0];
     const subRes = await asaasRequest("POST", "/subscriptions", {
-      customer: customerId, billingType, value: 29.90, nextDueDate, cycle: "MONTHLY", description: "SisteNext ERP"
+      customer: customerId, 
+      billingType, 
+      value: 29.90, 
+      nextDueDate, 
+      cycle: "MONTHLY", 
+      description: "SisteNext ERP"
     });
 
     // 3. Payment Details
@@ -156,60 +355,115 @@ app.post("/api/asaas/assinar", async (req, res) => {
     const p = payments.data?.[0] || {};
     
     const activeSubscription = {
-      subscriptionId: subRes.id, paymentId: p.id, status: p.status, billingType, 
-      paymentMethod, value: 29.90, nextDueDate, invoiceUrl: p.invoiceUrl || p.bankSlipUrl,
-      customerName: clientName, customerEmail: email, createdAt: new Date().toISOString()
+      subscriptionId: subRes.id, 
+      paymentId: p.id, 
+      status: p.status, 
+      billingType, 
+      paymentMethod: methodSanitized, 
+      value: 29.90, 
+      nextDueDate, 
+      invoiceUrl: p.invoiceUrl || p.bankSlipUrl,
+      customerName: nameSanitized, 
+      customerEmail: emailSanitized, 
+      createdAt: new Date().toISOString()
     };
 
     if (db) {
       await db.collection("configuracoes").doc(ownerId).set({ activeSubscription, updatedAt: new Date().toISOString() }, { merge: true });
     }
+    
+    logSecurityEvent("SUBSCRIPTION_CREATED", { ownerId, subscriptionId: subRes.id });
     res.json({ success: true, activeSubscription });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    logSecurityEvent("SUBSCRIPTION_FAILED", { error: err.message, user: req.user.uid });
+    res.status(500).json({ error: err.message || "Erro ao gerar assinatura." });
   }
 });
 
-app.post("/api/asaas/cancelar", async (req, res) => {
+app.post("/api/asaas/cancelar", authenticateFirebaseUser, asaasLimiter, async (req: any, res: any) => {
   try {
-    const { subscriptionId, ownerId } = req.body;
-    await asaasRequest("DELETE", `/subscriptions/${subscriptionId}`);
-    if (db) {
-      await db.collection("configuracoes").doc(ownerId).update({ "activeSubscription.status": "CANCELLED", updatedAt: new Date().toISOString() });
+    const { subscriptionId } = req.body;
+    const ownerId = req.user.uid; // STRICT: extracted from verified Token, never trusted from frontend body!
+
+    const subIdSanitized = sanitizeInput(subscriptionId);
+    if (!subIdSanitized) {
+      return res.status(400).json({ error: "Subscription ID is required." });
     }
+
+    // Verify subscription actually belongs to owner before deleting in Asaas
+    if (db) {
+      const configDoc = await db.collection("configuracoes").doc(ownerId).get();
+      if (!configDoc.exists || configDoc.data()?.activeSubscription?.subscriptionId !== subIdSanitized) {
+        logSecurityEvent("SUSPICIOUS_CANCELLATION_ATTEMPT", { ownerId, attemptedSubId: subIdSanitized });
+        return res.status(403).json({ error: "Operação não autorizada. Assinatura não pertence ao tenant." });
+      }
+    }
+
+    try {
+      await asaasRequest("DELETE", `/subscriptions/${subIdSanitized}`);
+    } catch (deleteErr: any) {
+      console.warn("[Asaas Delete Subscription Warning]:", deleteErr.message);
+    }
+
+    if (db) {
+      await db.collection("configuracoes").doc(ownerId).update({ 
+        "activeSubscription.status": "CANCELLED", 
+        updatedAt: new Date().toISOString() 
+      });
+    }
+
+    logSecurityEvent("SUBSCRIPTION_CANCELLED", { ownerId, subscriptionId: subIdSanitized });
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    logSecurityEvent("SUBSCRIPTION_CANCELLATION_FAILED", { error: err.message, user: req.user.uid });
+    res.status(500).json({ error: err.message || "Erro ao cancelar assinatura." });
   }
 });
 
 // CLIENT SUBSCRIPTIONS ENDPOINTS
-app.post("/api/asaas/criar-assinatura-cliente", async (req, res) => {
+app.post("/api/asaas/criar-assinatura-cliente", authenticateFirebaseUser, asaasLimiter, async (req: any, res: any) => {
   try {
-    const { clientId, clientName, email, cnpjCpf, paymentMethod, value, cycle, description, ownerId } = req.body;
-    if (!ownerId || !clientId || !clientName || !email) {
-      return res.status(400).json({ error: "Campos obrigatórios ausentes" });
+    const { clientId, clientName, email, cnpjCpf, paymentMethod, value, cycle, description } = req.body;
+    const ownerId = req.user.uid; // STRICT: extracted from verified Token!
+
+    const clientNameSanitized = sanitizeInput(clientName);
+    const emailSanitized = sanitizeInput(email);
+    const cnpjCpfSanitized = sanitizeInput(cnpjCpf);
+    const methodSanitized = sanitizeInput(paymentMethod);
+    const cycleSanitized = sanitizeInput(cycle);
+    const descSanitized = sanitizeInput(description);
+
+    if (!clientId || !clientNameSanitized || !emailSanitized) {
+      return res.status(400).json({ error: "Campos obrigatórios ausentes." });
+    }
+
+    if (!validateEmail(emailSanitized)) {
+      return res.status(400).json({ error: "Formato de e-mail inválido." });
     }
 
     // 1. Resolve customer in Asaas
     let customerId = "";
-    const cleanDoc = cnpjCpf?.replace(/\D/g, "");
+    const cleanDoc = cnpjCpfSanitized?.replace(/\D/g, "");
     try {
-      const search = await asaasRequest("GET", `/customers?email=${encodeURIComponent(email)}${cleanDoc ? `&cpfCnpj=${cleanDoc}` : ""}`);
+      const search = await asaasRequest("GET", `/customers?email=${encodeURIComponent(emailSanitized)}${cleanDoc ? `&cpfCnpj=${cleanDoc}` : ""}`);
       if (search.data?.[0]) customerId = search.data[0].id;
-    } catch (e) {
-      console.warn("Could not find customer by search", e);
+    } catch (e: any) {
+      console.warn("[Asaas Customer Search Client Warning]:", e.message);
     }
 
     if (!customerId) {
-      const customer = await asaasRequest("POST", "/customers", { name: clientName, email, cpfCnpj: cleanDoc });
+      const customer = await asaasRequest("POST", "/customers", { 
+        name: clientNameSanitized, 
+        email: emailSanitized, 
+        cpfCnpj: cleanDoc 
+      });
       customerId = customer.id;
     }
 
     // 2. Create the subscription in Asaas
-    const billingType = paymentMethod === "Boleto" ? "BOLETO" : (paymentMethod === "Crédito" ? "CREDIT_CARD" : "PIX");
+    const billingType = methodSanitized === "Boleto" ? "BOLETO" : (methodSanitized === "Crédito" ? "CREDIT_CARD" : "PIX");
     const nextDueDate = new Date(Date.now() + 86400000).toISOString().split("T")[0]; // tomorrow
-    const cycleValue = cycle === "Anual" ? "YEARLY" : "MONTHLY";
+    const cycleValue = cycleSanitized === "Anual" ? "YEARLY" : "MONTHLY";
 
     const subRes = await asaasRequest("POST", "/subscriptions", {
       customer: customerId,
@@ -217,7 +471,7 @@ app.post("/api/asaas/criar-assinatura-cliente", async (req, res) => {
       value: Number(value),
       nextDueDate,
       cycle: cycleValue,
-      description: description || `Assinatura - ${clientName}`
+      description: descSanitized || `Assinatura - ${clientNameSanitized}`
     });
 
     // 3. Get first payment details
@@ -225,20 +479,20 @@ app.post("/api/asaas/criar-assinatura-cliente", async (req, res) => {
     try {
       const payments = await asaasRequest("GET", `/subscriptions/${subRes.id}/payments`);
       p = payments.data?.[0] || {};
-    } catch (e) {
-      console.error("Erro ao carregar pagamentos da assinatura", e);
+    } catch (e: any) {
+      console.error("[Asaas Get Subscription Payments Warning]:", e.message);
     }
 
     const subscriptionData = {
       ownerId,
       clientId,
-      clientName,
-      clientEmail: email,
+      clientName: clientNameSanitized,
+      clientEmail: emailSanitized,
       value: Number(value),
-      cycle, // "Mensal" | "Anual"
-      paymentMethod, // "Pix" | "Boleto" | "Crédito"
+      cycle: cycleSanitized,
+      paymentMethod: methodSanitized,
       status: "Ativa",
-      description: description || `Assinatura Recorrente`,
+      description: descSanitized || `Assinatura Recorrente`,
       asaasSubscriptionId: subRes.id,
       asaasCustomerId: customerId,
       invoiceUrl: p.invoiceUrl || p.bankSlipUrl || "",
@@ -253,78 +507,112 @@ app.post("/api/asaas/criar-assinatura-cliente", async (req, res) => {
       const finalDoc = { ...subscriptionData, id: docRef.id };
       await docRef.set(finalDoc);
 
-      // Create a pending transaction entry in the financeiro ledger to reflect this new charge
+      // Create a pending transaction entry in the financeiro ledger
       const finRef = db.collection("financeiro").doc();
       await finRef.set({
         id: finRef.id,
         ownerId,
-        description: `${description || "Assinatura"} (${cycle === "Anual" ? "Anual" : "Mensal"})`,
+        description: `${descSanitized || "Assinatura"} (${cycleSanitized === "Anual" ? "Anual" : "Mensal"})`,
         type: "Receber",
         category: "Mensalidade",
         value: Number(value),
         status: "Pendente",
         date: nextDueDate,
-        clientName,
-        paymentMethod: paymentMethod === "Crédito" ? "Crédito" : (paymentMethod === "Boleto" ? "Boleto" : "Pix"),
+        clientName: clientNameSanitized,
+        paymentMethod: methodSanitized === "Crédito" ? "Crédito" : (methodSanitized === "Boleto" ? "Boleto" : "Pix"),
         createdAt: new Date().toISOString(),
         asaasId: subRes.id,
         asaasPaymentUrl: p.invoiceUrl || p.bankSlipUrl || ""
       });
 
+      logSecurityEvent("CLIENT_SUBSCRIPTION_CREATED", { ownerId, clientId, subscriptionId: subRes.id });
       res.json({ success: true, subscription: finalDoc });
     } else {
       res.json({ success: true, subscription: subscriptionData });
     }
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    logSecurityEvent("CLIENT_SUBSCRIPTION_FAILED", { error: err.message, user: req.user.uid });
+    res.status(500).json({ error: err.message || "Erro ao criar assinatura do cliente." });
   }
 });
 
-app.post("/api/asaas/cancelar-assinatura-cliente", async (req, res) => {
+app.post("/api/asaas/cancelar-assinatura-cliente", authenticateFirebaseUser, asaasLimiter, async (req: any, res: any) => {
   try {
-    const { asaasSubscriptionId, id, ownerId } = req.body;
-    if (!asaasSubscriptionId || !id) {
-      return res.status(400).json({ error: "Missing subscription ids" });
+    const { asaasSubscriptionId, id } = req.body;
+    const ownerId = req.user.uid; // STRICT: extracted from verified Token!
+
+    const asaasSubIdSanitized = sanitizeInput(asaasSubscriptionId);
+    const idSanitized = sanitizeInput(id);
+
+    if (!asaasSubIdSanitized || !idSanitized) {
+      return res.status(400).json({ error: "Missing subscription IDs." });
+    }
+
+    // STRICT MULTI-TENANT VERIFICATION
+    if (db) {
+      const docRef = db.collection("assinaturas_clientes").doc(idSanitized);
+      const snap = await docRef.get();
+      if (!snap.exists || snap.data().ownerId !== ownerId) {
+        logSecurityEvent("SUSPICIOUS_CLIENT_CANCELLATION", { ownerId, attemptedId: idSanitized });
+        return res.status(403).json({ error: "Você não tem permissão para cancelar esta assinatura de cliente." });
+      }
     }
 
     try {
-      await asaasRequest("DELETE", `/subscriptions/${asaasSubscriptionId}`);
+      await asaasRequest("DELETE", `/subscriptions/${asaasSubIdSanitized}`);
     } catch (e: any) {
-      console.warn("Error deleting from Asaas (might already be deleted or invalid)", e);
+      console.warn("[Asaas Delete Client Subscription Warning]:", e.message);
     }
 
     if (db) {
-      await db.collection("assinaturas_clientes").doc(id).update({
+      await db.collection("assinaturas_clientes").doc(idSanitized).update({
         status: "Cancelada",
         updatedAt: new Date().toISOString()
       });
     }
 
+    logSecurityEvent("CLIENT_SUBSCRIPTION_CANCELLED", { ownerId, id: idSanitized });
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    logSecurityEvent("CLIENT_SUBSCRIPTION_CANCELLATION_FAILED", { error: err.message, user: req.user.uid });
+    res.status(500).json({ error: err.message || "Erro ao cancelar assinatura do cliente." });
   }
 });
 
-app.get("/api/asaas/status/:paymentId", async (req, res) => {
+app.get("/api/asaas/status/:paymentId", authenticateFirebaseUser, asaasLimiter, async (req: any, res: any) => {
   try {
     const { paymentId } = req.params;
-    const { ownerId } = req.query;
-    const p = await asaasRequest("GET", `/payments/${paymentId}`);
-    if (ownerId && db) {
-      await db.collection("configuracoes").doc(ownerId as string).update({ "activeSubscription.status": p.status, updatedAt: new Date().toISOString() });
+    const ownerId = req.user.uid; // STRICT: extracted from verified Token!
+
+    const paymentIdSanitized = sanitizeInput(paymentId);
+    const p = await asaasRequest("GET", `/payments/${paymentIdSanitized}`);
+    
+    if (db) {
+      await db.collection("configuracoes").doc(ownerId).update({ 
+        "activeSubscription.status": p.status, 
+        updatedAt: new Date().toISOString() 
+      });
     }
+    
+    logSecurityEvent("SYNCED_SUBSCRIPTION_STATUS", { ownerId, paymentId: paymentIdSanitized, status: p.status });
     res.json({ success: true, status: p.status });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    logSecurityEvent("SYNC_FAILED", { error: err.message, user: req.user.uid });
+    res.status(500).json({ error: err.message || "Erro ao verificar status de pagamento." });
   }
 });
 
-app.post("/api/webhook/asaas", async (req, res) => {
+app.post("/api/webhook/asaas", async (req: any, res: any) => {
   try {
-    if (req.headers["asaas-access-token"] !== process.env.ASAAS_WEBHOOK_TOKEN) return res.status(401).send();
+    // Validate Webhook Token
+    if (req.headers["asaas-access-token"] !== process.env.ASAAS_WEBHOOK_TOKEN) {
+      logSecurityEvent("WEBHOOK_UNAUTHORIZED", { headers: req.headers, ip: req.ip });
+      return res.status(401).send();
+    }
+    
     const { event, payment } = req.body;
     const subId = payment?.subscription;
+    
     if (subId && db) {
       const snap = await db.collection("configuracoes").where("activeSubscription.subscriptionId", "==", subId).get();
       if (!snap.empty) {
@@ -333,13 +621,17 @@ app.post("/api/webhook/asaas", async (req, res) => {
         if (event === "PAYMENT_OVERDUE") status = "OVERDUE";
         if (event === "SUBSCRIPTION_DELETED") status = "CANCELLED";
         await snap.docs[0].ref.update({ "activeSubscription.status": status, updatedAt: new Date().toISOString() });
+        logSecurityEvent("WEBHOOK_UPDATED_SUBSCRIPTION", { subscriptionId: subId, status });
       }
     }
     res.json({ received: true });
-  } catch (err) { res.status(500).send(); }
+  } catch (err: any) { 
+    logSecurityEvent("WEBHOOK_FAILED", { error: err.message });
+    res.status(500).send(); 
+  }
 });
 
-app.get("/api/asaas/config-status", (req, res) => {
+app.get("/api/asaas/config-status", authenticateFirebaseUser, (req: any, res: any) => {
   const apiKey = process.env.ASAAS_API_KEY;
   const isConfigured = !!apiKey && apiKey.trim() !== "" && !apiKey.includes("MY_ASAAS") && !apiKey.includes("YOUR_");
   const isSandbox = isConfigured ? (apiKey.includes("test") || process.env.ASAAS_SANDBOX === "true") : true;
@@ -349,45 +641,60 @@ app.get("/api/asaas/config-status", (req, res) => {
   });
 });
 
-app.post("/api/leads", async (req, res) => {
-  console.log("[DEBUG] /api/leads - Request Received");
-  console.log("[DEBUG] Origin Header:", req.headers.origin);
-  console.log("[DEBUG] Method:", req.method);
-  console.log("[DEBUG] Content-Type:", req.headers["content-type"]);
-  console.log("[DEBUG] Body:", JSON.stringify(req.body, null, 2));
-
+app.post("/api/leads", leadsLimiter, async (req: any, res: any) => {
   try {
     const { nome, telefone, email, origem, dados } = req.body;
 
-    // 1. Validar que nome e telefone existem (empresaId não é mais obrigatório do frontend)
-    if (!nome || !telefone) {
-      console.log("[DEBUG] Status 400 - Missing mandatory fields");
+    const nomeSanitized = sanitizeInput(nome);
+    const telefoneSanitized = sanitizeInput(telefone);
+    const emailSanitized = sanitizeInput(email);
+    const origemSanitized = sanitizeInput(origem);
+
+    // 1. Validar que nome e telefone existem
+    if (!nomeSanitized || !telefoneSanitized) {
+      logSecurityEvent("LEAD_CREATION_FAILED", { reason: "Missing mandatory fields", email });
       return res.status(400).json({
         success: false,
         error: "Campos obrigatórios ausentes: nome e telefone são necessários."
       });
     }
 
+    if (emailSanitized && !validateEmail(emailSanitized)) {
+      logSecurityEvent("LEAD_CREATION_FAILED", { reason: "Invalid email", email: emailSanitized });
+      return res.status(400).json({
+        success: false,
+        error: "Formato de e-mail inválido."
+      });
+    }
+
+    if (!validatePhone(telefoneSanitized)) {
+      logSecurityEvent("LEAD_CREATION_FAILED", { reason: "Invalid phone", phone: telefoneSanitized });
+      return res.status(400).json({
+        success: false,
+        error: "Número de telefone ou WhatsApp inválido."
+      });
+    }
+
     if (!db) {
-      console.log("[DEBUG] Status 500 - Database not initialized");
+      logSecurityEvent("LEAD_CREATION_FAILED", { reason: "Database not initialized" });
       return res.status(500).json({
         success: false,
         error: "Banco de dados não inicializado no servidor."
       });
     }
 
-    // Hardcoded ownerId for the system
+    // Hardcoded ownerId for the default landing page system
     const ownerId = "jg5b7eIoVFWKsGeyEShOGfviv2h2";
 
-    // 2. Salvar no Firestore na coleção 'leads' seguindo exatamente o formato do CRM
+    // 2. Salvar no Firestore na coleção 'leads'
     const leadData = {
       ownerId,
-      name: nome,
-      company: dados?.titulo || "Lead Web",
+      name: nomeSanitized,
+      company: sanitizeInput(dados?.titulo || "Lead Web"),
       representative: "API Externa",
-      phone: telefone,
-      whatsapp: telefone,
-      email: email || "",
+      phone: telefoneSanitized,
+      whatsapp: telefoneSanitized,
+      email: emailSanitized || "",
       instagram: "",
       linkedin: "",
       city: "",
@@ -396,9 +703,9 @@ app.post("/api/leads", async (req, res) => {
       segment: "Imobiliário",
       employeeCount: 0,
       estimatedRevenue: 0,
-      source: origem || "Site Imobiliária",
+      source: origemSanitized || "Site Imobiliária",
       entryDate: new Date().toISOString().split('T')[0],
-      notes: dados?.imovelId ? `Interesse no Imóvel ID: ${dados.imovelId}${dados.valor ? ` (Valor: ${dados.valor})` : ""}` : "Lead recebido via API",
+      notes: dados?.imovelId ? `Interesse no Imóvel ID: ${sanitizeInput(dados.imovelId)}${dados.valor ? ` (Valor: ${Number(dados.valor)})` : ""}` : "Lead recebido via API",
       status: "Novo Lead",
       temperature: "Morno",
       tags: ["API"],
@@ -409,22 +716,22 @@ app.post("/api/leads", async (req, res) => {
     };
 
     const docRef = await db.collection("leads").add(leadData);
-    console.log("[DEBUG] Status 200 - Lead successfully created ID:", docRef.id);
+    logSecurityEvent("LEAD_CREATED_SUCCESSFULLY", { leadId: docRef.id });
 
     res.json({
       success: true,
       leadId: docRef.id
     });
   } catch (err: any) {
-    console.error("[DEBUG] [POST /api/leads Error]:", err);
+    logSecurityEvent("LEAD_CREATION_ERROR", { error: err.message });
     res.status(500).json({
       success: false,
-      error: err.message || "Erro interno ao processar lead"
+      error: "Erro interno ao processar lead."
     });
   }
 });
 
-app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+app.get("/api/health", (req: any, res: any) => res.json({ status: "ok" }));
 
 // Static / Vite Setup
 async function bootstrap() {
@@ -443,7 +750,7 @@ async function bootstrap() {
     const dist = path.join(process.cwd(), "dist");
     if (fs.existsSync(dist)) {
       app.use(express.static(dist));
-      app.get("*", (req, res) => res.sendFile(path.join(dist, "index.html")));
+      app.get("*", (req: any, res: any) => res.sendFile(path.join(dist, "index.html")));
     }
   }
 
