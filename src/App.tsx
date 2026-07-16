@@ -10,6 +10,9 @@ import {
   deleteItemWithJustification,
   setActiveUserEmail
 } from './dbService';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useSync } from './hooks/useSync';
+import { cacheService } from './services/CacheService';
 import {
   Lead,
   Empresa,
@@ -133,6 +136,36 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [activeSection, setActiveSection] = useState<ActiveSection>('dashboard');
   const [showLogin, setShowLogin] = useState(false);
+
+  // Connection & synchronization states
+  const isOnline = useOnlineStatus();
+  const { syncStatus, statusMessage, triggerSync } = useSync(user?.ownerId, [
+    'leads',
+    'empresas',
+    'clientes',
+    'projetos',
+    'propostas',
+    'contratos',
+    'financeiro',
+    'agenda',
+    'follow_ups',
+    'anotacoes',
+    'documentos',
+    'equipe',
+    'logs',
+    'oportunidades',
+    'configuracoes'
+  ]);
+
+  // PWA Cache updates detection
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+
+  useEffect(() => {
+    cacheService.registerServiceWorker();
+    return cacheService.subscribeUpdate(() => {
+      setUpdateAvailable(true);
+    });
+  }, []);
 
   // CRM Global Realtime States
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -1012,33 +1045,89 @@ export default function App() {
       
       {/* View Stage */}
       <main className="flex-1 overflow-y-auto max-h-screen relative flex flex-col">
-        {/* Global Premium TopBar */}
-        {(companyName || isVendedor) && (
-          <div className="bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800/60 px-6 py-3 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md bg-opacity-95 dark:bg-opacity-95 shrink-0">
+        {/* New Version Alert Banner */}
+        {updateAvailable && (
+          <div className="bg-indigo-600 text-white px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-semibold shrink-0 shadow-md animate-pulse">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                Organização:
-              </span>
-              <div className="flex items-center gap-1.5 bg-indigo-500/5 dark:bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/10">
-                {customLogo ? (
-                  <img src={customLogo} alt={companyName || 'SisteNext'} className="w-4 h-4 rounded object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
-                )}
-                <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 font-mono tracking-tight uppercase">
-                  {companyName || 'SisteNext CRM'}
-                </span>
-              </div>
+              <span className="text-base">🚀</span>
+              <span>Existe uma nova versão disponível do SisteNext. Deseja atualizar agora?</span>
             </div>
-            
+            <button 
+              onClick={() => cacheService.applyUpdate()}
+              className="bg-white text-indigo-600 hover:bg-indigo-50 px-4 py-1.5 rounded-lg font-bold transition-colors cursor-pointer text-[10px] uppercase shadow-sm"
+            >
+              Atualizar Agora
+            </button>
+          </div>
+        )}
+
+        {/* Global Premium TopBar */}
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800/60 px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sticky top-0 z-40 backdrop-blur-md bg-opacity-95 dark:bg-opacity-95 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              Organização:
+            </span>
+            <div className="flex items-center gap-1.5 bg-indigo-500/5 dark:bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/10">
+              {customLogo ? (
+                <img src={customLogo} alt={companyName || 'SisteNext'} className="w-4 h-4 rounded object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+              )}
+              <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 font-mono tracking-tight uppercase">
+                {companyName || 'SisteNext CRM'}
+              </span>
+            </div>
+          </div>
+          
+          <div className="flex items-center flex-wrap gap-2.5 sm:justify-end">
+            {/* Connection Status Indicator */}
+            <div className={`flex items-center gap-1.5 text-[9px] px-2.5 py-1 rounded-full font-extrabold uppercase ${
+              isOnline 
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 animate-pulse'
+            }`} title={isOnline ? 'Internet conectada' : 'Sem conexão de internet - Modo offline ativo'}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+              {isOnline ? '🟢 Online' : '🔴 Offline'}
+            </div>
+
+            {/* Sync Status Button */}
+            {isOnline ? (
+              <button 
+                onClick={() => triggerSync()}
+                disabled={syncStatus === 'syncing'}
+                className={`flex items-center gap-1.5 text-[9px] px-2.5 py-1 rounded-full font-extrabold border transition-all cursor-pointer ${
+                  syncStatus === 'syncing'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 animate-pulse'
+                    : syncStatus === 'error'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                    : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20'
+                }`}
+                title="Clique para sincronizar com Firestore"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  syncStatus === 'syncing' 
+                    ? 'bg-amber-500 animate-spin' 
+                    : syncStatus === 'error'
+                    ? 'bg-rose-500'
+                    : 'bg-indigo-500'
+                }`} />
+                {statusMessage}
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[9px] px-2.5 py-1 rounded-full font-extrabold border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400" title="Trabalhando em modo local">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Todos os dados salvos localmente
+              </div>
+            )}
+
             {isVendedor && (
-              <div className="flex items-center gap-1.5 text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wider">
+              <div className="flex items-center gap-1.5 text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
                 Painel do Consultor
               </div>
             )}
           </div>
-        )}
+        </div>
         <div className="flex-1">
           {renderContent()}
         </div>

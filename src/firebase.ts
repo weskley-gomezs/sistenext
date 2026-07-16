@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyB3mjERkgW_aAyAny_hfESGl6DlivVC8gc",
@@ -15,6 +15,11 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
-// Use getFirestore to specify the databaseId safely
-export const db = getFirestore(app, "ai-studio-69c00000-1f90-47ec-b89a-a6776d85b929");
+// Initialize Firestore with persistent local cache for superior offline resilience
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+}, "ai-studio-69c00000-1f90-47ec-b89a-a6776d85b929");
+
 export default app;
