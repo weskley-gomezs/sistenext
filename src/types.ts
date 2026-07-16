@@ -324,7 +324,7 @@ export interface MembroEquipe {
 export interface OportunidadeColumn {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'boolean';
+  type: 'text' | 'number' | 'boolean' | 'link';
 }
 
 export interface OportunidadeRow {

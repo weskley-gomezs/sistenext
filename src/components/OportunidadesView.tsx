@@ -13,7 +13,8 @@ import {
   CheckCircle2,
   Calendar,
   Layers,
-  ChevronDown
+  ChevronDown,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Oportunidade, OportunidadeColumn, OportunidadeRow, MembroEquipe } from '../types';
@@ -44,6 +45,15 @@ export default function OportunidadesView({
   const [localColumns, setLocalColumns] = useState<OportunidadeColumn[]>([]);
   const [tableName, setTableName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const getHref = (url: string) => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed;
+    }
+    return `https://${trimmed}`;
+  };
   
   // Modals & Forms states
   const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
@@ -51,7 +61,7 @@ export default function OportunidadesView({
   
   const [isAddColOpen, setIsAddColOpen] = useState(false);
   const [newColLabel, setNewColLabel] = useState('');
-  const [newColType, setNewColType] = useState<'text' | 'number' | 'boolean'>('text');
+  const [newColType, setNewColType] = useState<'text' | 'number' | 'boolean' | 'link'>('text');
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -851,13 +861,26 @@ export default function OportunidadesView({
                               </div>
                             ) : (
                               // Transparent input fields styled as cells
-                              <input
-                                type={col.type === 'number' ? 'number' : 'text'}
-                                value={row[col.key] || ''}
-                                onChange={(e) => handleCellChange(row.id, col.key, e.target.value)}
-                                className="w-full bg-transparent px-3 py-2 text-slate-800 dark:text-slate-100 text-xs placeholder-slate-300 dark:placeholder-slate-700 focus:bg-white dark:focus:bg-slate-950 focus:ring-1 focus:ring-indigo-500 focus:outline-none rounded-lg transition-all"
-                                placeholder={col.key === 'empresa' ? 'Nome da Empresa...' : col.key === 'telefone' ? '(00) 00000-0000...' : 'Preencha...'}
-                              />
+                              <div className="flex items-center w-full">
+                                <input
+                                  type={col.type === 'number' ? 'number' : 'text'}
+                                  value={row[col.key] || ''}
+                                  onChange={(e) => handleCellChange(row.id, col.key, e.target.value)}
+                                  className="flex-1 min-w-0 bg-transparent px-3 py-2 text-slate-800 dark:text-slate-100 text-xs placeholder-slate-300 dark:placeholder-slate-700 focus:bg-white dark:focus:bg-slate-950 focus:ring-1 focus:ring-indigo-500 focus:outline-none rounded-lg transition-all"
+                                  placeholder={col.key === 'empresa' ? 'Nome da Empresa...' : col.key === 'telefone' ? '(00) 00000-0000...' : col.type === 'link' ? 'Insira um link...' : 'Preencha...'}
+                                />
+                                {col.type === 'link' && row[col.key] && (
+                                  <a
+                                    href={getHref(row[col.key])}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded transition-colors mr-1 flex items-center shrink-0"
+                                    title="Abrir link em nova guia"
+                                  >
+                                    <ExternalLink size={14} />
+                                  </a>
+                                )}
+                              </div>
                             )}
                           </td>
                         );
@@ -1029,6 +1052,7 @@ export default function OportunidadesView({
                       <option value="text">Texto (Ex: Observações, Segmento)</option>
                       <option value="number">Número (Ex: Valor, Nota)</option>
                       <option value="boolean">Verdadeiro / Falso (Checkbox)</option>
+                      <option value="link">Link / URL (Ex: Site, Redes Sociais)</option>
                     </select>
                     <ChevronDown className="absolute right-3 top-3 text-slate-400 pointer-events-none" size={14} />
                   </div>
