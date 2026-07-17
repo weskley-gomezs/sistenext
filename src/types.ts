@@ -330,7 +330,7 @@ export interface OportunidadeColumn {
 export interface OportunidadeRow {
   id: string;
   empresa: string;
-  telefone: string;
+  telefone?: string;
   contato: boolean;
   [key: string]: any;
 }

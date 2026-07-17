@@ -70,6 +70,16 @@ export default function OportunidadesView({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Helper to check if a row has any meaningful data
+  const isRowNotEmpty = (r: OportunidadeRow) => {
+    return Object.entries(r).some(([key, value]) => {
+      if (key === 'id' || key === 'contato') return false;
+      if (typeof value === 'string') return value.trim() !== '';
+      if (typeof value === 'number') return true;
+      return value !== null && value !== undefined && value !== false;
+    });
+  };
+
   // Load initial spreadsheet
   useEffect(() => {
     if (oportunidades.length > 0) {
@@ -110,14 +120,7 @@ export default function OportunidadesView({
     const delayDebounceFn = setTimeout(() => {
       const autoSave = async () => {
         // Filter out completely empty rows
-        const validRows = localRows.filter(r => (r.empresa || '').trim() !== '' || (r.telefone || '').trim() !== '');
-
-        // Check if any partially filled row is incomplete (e.g. user is in the middle of typing)
-        const hasIncompleteRow = validRows.some(r => !(r.empresa || '').trim() || !(r.telefone || '').trim());
-        if (hasIncompleteRow) {
-          // Keep waiting for completion before saving, don't throw blocking alerts in auto-save
-          return;
-        }
+        const validRows = localRows.filter(isRowNotEmpty);
 
         try {
           setIsSaving(true);
@@ -343,14 +346,14 @@ export default function OportunidadesView({
           }
         });
 
-        // Add if there is at least a name or a phone number
-        if ((row.empresa || '').trim() || (row.telefone || '').trim()) {
+        // Add if there is any data in the row
+        if (isRowNotEmpty(row)) {
           rows.push(row);
         }
       }
 
       if (rows.length === 0) {
-        alert('Nenhum registro válido foi encontrado na planilha. Verifique se possui linhas com "Nome da Empresa" ou "Telefone" preenchidos.');
+        alert('Nenhum registro válido foi encontrado na planilha. Verifique se as linhas possuem dados preenchidos.');
         return;
       }
 
@@ -497,15 +500,19 @@ export default function OportunidadesView({
 
     const tableIdForSave = selectedTableId;
 
-    // Filter out completely empty rows (where both company and phone are empty)
-    const validRows = localRows.filter(r => (r.empresa || '').trim() !== '' || (r.telefone || '').trim() !== '');
+    // Filter out completely empty rows
+    const validRows = localRows.filter(isRowNotEmpty);
 
-    // Validate that remaining rows have both mandatory fields filled
-    const invalidRow = validRows.find(r => !(r.empresa || '').trim() || !(r.telefone || '').trim());
-    if (invalidRow) {
-      const idx = localRows.findIndex(r => r.id === invalidRow.id) + 1;
-      alert(`Erro: A linha ${idx} está com campos obrigatórios incompletos. Preencha o "Nome da Empresa" e o "Telefone" correspondentes.`);
-      return;
+    // Validate that remaining rows have at least a name, or warn the user
+    const rowsWithoutCompany = validRows.filter(r => !(r.empresa || '').trim());
+    if (rowsWithoutCompany.length > 0) {
+      const confirmSave = window.confirm(
+        `Atenção: ${rowsWithoutCompany.length} linha(s) estão sem o "Nome da Empresa". Elas serão salvas, mas recomendamos preencher este campo para melhor organização. Deseja continuar?`
+      );
+      if (!confirmSave) {
+        setIsSaving(false);
+        return;
+      }
     }
 
     try {
@@ -967,7 +974,7 @@ export default function OportunidadesView({
                     className="w-full text-sm px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                   />
                   <span className="text-[10px] text-slate-400 mt-1 block">
-                    Por padrão, ela será criada com as colunas obrigatórias: Empresa, Telefone e Entrou em Contato.
+                    Por padrão, ela será criada com as colunas: Empresa (obrigatória), Telefone e Entrou em Contato.
                   </span>
                 </div>
 
