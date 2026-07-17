@@ -51,6 +51,7 @@ import DocumentosView from './components/DocumentosView';
 import ConfiguracoesView from './components/ConfiguracoesView';
 import EquipeView from './components/EquipeView';
 import OportunidadesView from './components/OportunidadesView';
+import MarketingView from './marketing/pages/MarketingView';
 
 // Simple Chronological Timeline of all Follow-ups across the system
 import { History, CalendarClock, User } from 'lucide-react';
@@ -991,6 +992,10 @@ export default function App() {
               return deleteItemWithJustification('oportunidades', id, data, justification, user.ownerId);
             }}
           />
+        );
+      case 'marketing':
+        return (
+          <MarketingView user={user} />
         );
       case 'configuracoes':
         return (

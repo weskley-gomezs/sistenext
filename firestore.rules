@@ -171,5 +171,104 @@ service cloud.firestore {
         (request.resource == null || isAuthorized(request.resource.data.ownerId))
       );
     }
+
+    match /planejamentos/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /nichos/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /estrategias/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /conteudos/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /prospeccoes/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /diagnosticos/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /projetosPromocionais/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /cases/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /ideias/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /relatorios/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
+
+    match /metas/{id} {
+      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow list: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        (resource == null || isAuthorized(resource.data.ownerId)) &&
+        (request.resource == null || isAuthorized(request.resource.data.ownerId))
+      );
+    }
   }
 }

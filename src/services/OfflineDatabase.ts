@@ -1,5 +1,5 @@
 const DB_NAME = 'SisteNextOfflineDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const OFFLINE_STORES = [
   'leads',
@@ -18,7 +18,18 @@ export const OFFLINE_STORES = [
   'oportunidades',
   'configuracoes',
   'user_profiles',
-  'sync_queue'
+  'sync_queue',
+  'planejamentos',
+  'nichos',
+  'estrategias',
+  'conteudos',
+  'prospeccoes',
+  'diagnosticos',
+  'projetosPromocionais',
+  'cases',
+  'ideias',
+  'relatorios',
+  'metas'
 ];
 
 class OfflineDatabase {

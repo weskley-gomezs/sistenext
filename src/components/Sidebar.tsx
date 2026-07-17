@@ -25,7 +25,8 @@ import {
   ChevronsLeft,
   ChevronsRight,
   FileDown,
-  Grid
+  Grid,
+  Megaphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 const nexusErpLogo = 'https://i.imgur.com/BewcRiJ.png';
@@ -33,6 +34,7 @@ const nexusErpLogo = 'https://i.imgur.com/BewcRiJ.png';
 export type ActiveSection =
   | 'dashboard'
   | 'leads'
+  | 'marketing'
   | 'empresas'
   | 'clientes'
   | 'projetos'
@@ -86,6 +88,7 @@ export default function Sidebar({
   const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'leads', label: 'Leads (Pipeline)', icon: Target },
+    { id: 'marketing', label: 'Marketing', icon: Megaphone },
     { id: 'oportunidade', label: 'Oportunidades', icon: Grid },
     { id: 'empresas', label: 'Empresas', icon: Building2 },
     { id: 'clientes', label: 'Clientes Ativos', icon: Users },
