@@ -108,7 +108,7 @@ export default function OportunidadesView({
       setTableName('');
       setHasChanges(false);
     }
-  }, [oportunidades, selectedTableId, hasChanges]);
+  }, [oportunidades, selectedTableId]);
 
   // Debounced auto-save effect
   useEffect(() => {
@@ -119,22 +119,18 @@ export default function OportunidadesView({
 
     const delayDebounceFn = setTimeout(() => {
       const autoSave = async () => {
-        // Filter out completely empty rows
-        const validRows = localRows.filter(isRowNotEmpty);
-
         try {
           setIsSaving(true);
           await onUpdateOportunidade(tableIdForThisEffect, {
             name: tableName,
             columns: localColumns,
-            rows: validRows
+            rows: localRows
           });
 
           // CRITICAL: Only update the local React state and clear the dirty flag if the user
           // is still viewing/editing the SAME spreadsheet that we just saved!
           setSelectedTableId(currentId => {
             if (currentId === tableIdForThisEffect) {
-              setLocalRows(validRows);
               setHasChanges(false);
               setSaveSuccess(true);
               setTimeout(() => setSaveSuccess(false), 3000);
@@ -500,33 +496,17 @@ export default function OportunidadesView({
 
     const tableIdForSave = selectedTableId;
 
-    // Filter out completely empty rows
-    const validRows = localRows.filter(isRowNotEmpty);
-
-    // Validate that remaining rows have at least a name, or warn the user
-    const rowsWithoutCompany = validRows.filter(r => !(r.empresa || '').trim());
-    if (rowsWithoutCompany.length > 0) {
-      const confirmSave = window.confirm(
-        `Atenção: ${rowsWithoutCompany.length} linha(s) estão sem o "Nome da Empresa". Elas serão salvas, mas recomendamos preencher este campo para melhor organização. Deseja continuar?`
-      );
-      if (!confirmSave) {
-        setIsSaving(false);
-        return;
-      }
-    }
-
     try {
       setIsSaving(true);
       await onUpdateOportunidade(tableIdForSave, {
         name: tableName,
         columns: localColumns,
-        rows: validRows
+        rows: localRows
       });
 
       // CRITICAL: Only update React state if the user is still on the same sheet
       setSelectedTableId(currentId => {
         if (currentId === tableIdForSave) {
-          setLocalRows(validRows); // Sync local state with the filtered rows
           setHasChanges(false);
           setSaveSuccess(true);
         }
