@@ -267,6 +267,8 @@ export interface Anotacao {
   ownerId?: string;
   title: string;
   content: string;
+  drawingData?: string;
+  hasDrawing?: boolean;
   entityId?: string;
   entityName?: string;
   entityType?: 'client' | 'lead' | 'project';
