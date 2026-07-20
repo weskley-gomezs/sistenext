@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import cors from "cors";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from "dotenv";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -150,7 +150,6 @@ function sanitizeInput(str: any): string {
   return str
     .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, "") // Script tag removal
     .replace(/<\/?[^>]+(>|$)/g, "")                     // HTML tags removal
-    .replace(/['"\\;]/g, "")                             // SQL/NoSQL injections character removal
     .trim();
 }
 
@@ -235,14 +234,7 @@ async function authenticateFirebaseUser(req: any, res: any, next: any) {
 const getAiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_GEMINI_KEY;
   if (!apiKey) throw new Error("A chave da API Gemini não está configurada (GEMINI_API_KEY ou API_GEMINI_KEY).");
-  return new GoogleGenAI({ 
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      }
-    }
-  });
+  return new GoogleGenerativeAI(apiKey);
 };
 
 async function asaasRequest(method: string, path: string, body?: any) {
@@ -293,13 +285,21 @@ app.post("/api/chat-gemini", authenticateFirebaseUser, geminiLimiter, async (req
       return res.status(400).json({ error: "O prompt não pode ser vazio." });
     }
 
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: promptSanitized,
-      config: systemInstructionSanitized ? { systemInstruction: systemInstructionSanitized } : {}
+    const genAI = getAiClient();
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-1.5-flash',
+      systemInstruction: systemInstructionSanitized || undefined
     });
-    res.json({ text: response.text });
+
+    try {
+      const result = await model.generateContent(promptSanitized);
+      const response = await result.response;
+      const text = response.text();
+      res.json({ text });
+    } catch (genErr: any) {
+      console.error("[Gemini API Error]:", genErr);
+      res.status(500).json({ error: `Erro na API Gemini: ${genErr.message}` });
+    }
   } catch (err: any) {
     logSecurityEvent("GEMINI_ERROR", { error: err.message });
     res.status(500).json({ error: err.message || "Não foi possível processar a requisição de IA." });
