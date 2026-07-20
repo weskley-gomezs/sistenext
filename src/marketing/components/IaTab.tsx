@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, Send, Copy, Bot, BrainCircuit, UserPlus, FileText, Award } from 'lucide-react';
-import { aiService } from '../services/aiService';
+import { aiService, askGemini } from '../services/aiService';
 
 export default function IaTab() {
   const [query, setQuery] = useState('');
@@ -37,13 +37,8 @@ export default function IaTab() {
     }
 
     try {
-      // Direct call using the robust generic text generation
-      const res = await aiService.generateOutreachMessage(
-        'Empresa Geral',
-        'Tecnologia',
-        promptToSend,
-        'Chat Direto'
-      );
+      // Use direct askGemini for better flexibility in the IA Copilot tab
+      const res = await askGemini(promptToSend);
       setResult(res);
     } catch (err: any) {
       setResult('Erro ao conversar com o Gemini: ' + err.message);

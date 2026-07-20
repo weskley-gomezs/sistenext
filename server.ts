@@ -233,9 +233,16 @@ async function authenticateFirebaseUser(req: any, res: any, next: any) {
 // --- EXTERNAL COMPATIBILITY & CONFIGURATION HELPERS ---
 
 const getAiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
-  return new GoogleGenAI({ apiKey });
+  const apiKey = process.env.GEMINI_API_KEY || process.env.API_GEMINI_KEY;
+  if (!apiKey) throw new Error("A chave da API Gemini não está configurada (GEMINI_API_KEY ou API_GEMINI_KEY).");
+  return new GoogleGenAI({ 
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
 };
 
 async function asaasRequest(method: string, path: string, body?: any) {
@@ -288,14 +295,14 @@ app.post("/api/chat-gemini", authenticateFirebaseUser, geminiLimiter, async (req
 
     const ai = getAiClient();
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash',
       contents: promptSanitized,
       config: systemInstructionSanitized ? { systemInstruction: systemInstructionSanitized } : {}
     });
     res.json({ text: response.text });
   } catch (err: any) {
     logSecurityEvent("GEMINI_ERROR", { error: err.message });
-    res.status(500).json({ error: "Não foi possível processar a requisição de IA." });
+    res.status(500).json({ error: err.message || "Não foi possível processar a requisição de IA." });
   }
 });
 
