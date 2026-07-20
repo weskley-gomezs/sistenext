@@ -275,11 +275,11 @@ async function asaasRequest(method: string, path: string, body?: any) {
 
 // --- SECURED API ENDPOINTS ---
 
-app.post("/api/chat-gemini", authenticateFirebaseUser, geminiLimiter, async (req: any, res: any) => {
+app.post("/api/gemini", geminiLimiter, async (req: any, res: any) => {
   try {
     const { prompt, systemInstruction } = req.body;
     const promptSanitized = sanitizeInput(prompt);
-    const systemInstructionSanitized = sanitizeInput(systemInstruction);
+    const systemInstructionSanitized = systemInstruction ? sanitizeInput(systemInstruction) : "";
 
     if (!promptSanitized) {
       return res.status(400).json({ error: "O prompt não pode ser vazio." });
@@ -291,18 +291,24 @@ app.post("/api/chat-gemini", authenticateFirebaseUser, geminiLimiter, async (req
       systemInstruction: systemInstructionSanitized || undefined
     });
 
+    console.log(`[Gemini Request] Iniciando geração...`);
+
     try {
       const result = await model.generateContent(promptSanitized);
-      const response = await result.response;
-      const text = response.text();
+      const text = result.response.text();
+      
+      if (!text) {
+        throw new Error("A API do Gemini retornou uma resposta vazia.");
+      }
+
       res.json({ text });
     } catch (genErr: any) {
-      console.error("[Gemini API Error]:", genErr);
+      console.error("[Gemini API Internal Error]:", genErr);
       res.status(500).json({ error: `Erro na API Gemini: ${genErr.message}` });
     }
   } catch (err: any) {
-    logSecurityEvent("GEMINI_ERROR", { error: err.message });
-    res.status(500).json({ error: err.message || "Não foi possível processar a requisição de IA." });
+    console.error("[Gemini Endpoint Error]:", err);
+    res.status(500).json({ error: err.message || "Erro interno ao processar requisição de IA." });
   }
 });
 
