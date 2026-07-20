@@ -107,7 +107,18 @@ export default function ClientesView({
     }
   };
 
-  const filtered = clientes.filter((cli) => {
+  const uniqueClients = React.useMemo(() => {
+    const seen = new Set();
+    return clientes.filter(cli => {
+      // Priority key is leadId, fallback to combination of name and company
+      const key = cli.leadId || `${cli.companyName}-${cli.name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [clientes]);
+
+  const filtered = uniqueClients.filter((cli) => {
     const q = search.toLowerCase();
     return (
       cli.name.toLowerCase().includes(q) ||

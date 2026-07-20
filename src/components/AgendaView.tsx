@@ -32,12 +32,16 @@ export default function AgendaView({
   const [time, setTime] = useState('');
   const [type, setType] = useState<'Reunião' | 'Apresentação' | 'Follow-up' | 'Outro'>('Reunião');
   const [relatedEntity, setRelatedEntity] = useState('');
+  const [linkedId, setLinkedId] = useState('');
+  const [linkedType, setLinkedType] = useState<'lead' | 'client' | 'project' | undefined>(undefined);
   const [description, setDescription] = useState('');
   const [meetingUrl, setMeetingUrl] = useState('');
   const [itemToDeleteId, setItemToDeleteId] = useState<string | null>(null);
 
   const recipients = [
-    ...leads.map((l) => ({ id: l.id, name: `${l.company} (${l.name})`, type: 'Lead' })),
+    ...leads
+      .filter((l) => l.status !== 'Cliente')
+      .map((l) => ({ id: l.id, name: `${l.company} (${l.name})`, type: 'Lead' })),
     ...clientes.map((c) => ({ id: c.id, name: `${c.companyName} (${c.name})`, type: 'Cliente' }))
   ];
 
@@ -49,6 +53,9 @@ export default function AgendaView({
       time,
       type,
       relatedEntity: relatedEntity || 'Geral',
+      linkedId: linkedId || undefined,
+      linkedType: linkedType || undefined,
+      linkedName: relatedEntity || undefined,
       description: description || '',
       meetingUrl: meetingUrl?.trim() || null,
       status: 'Pendente'
@@ -69,6 +76,8 @@ export default function AgendaView({
     setTime('');
     setType('Reunião');
     setRelatedEntity('');
+    setLinkedId('');
+    setLinkedType(undefined);
     setDescription('');
     setMeetingUrl('');
   };
@@ -444,13 +453,24 @@ export default function AgendaView({
                   <div>
                     <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Empresa / Lead Vinculado</label>
                     <select
-                      value={relatedEntity}
-                      onChange={(e) => setRelatedEntity(e.target.value)}
+                      value={linkedId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setLinkedId(val);
+                        const found = recipients.find(r => r.id === val);
+                        if (found) {
+                          setRelatedEntity(found.name.split(' (')[0]);
+                          setLinkedType(found.type.toLowerCase() as any);
+                        } else {
+                          setRelatedEntity('');
+                          setLinkedType(undefined);
+                        }
+                      }}
                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-bold text-xs"
                     >
                       <option value="">Geral (Sem vínculo)</option>
                       {recipients.map((r) => (
-                        <option key={r.id} value={r.name.split(' (')[0]}>
+                        <option key={r.id} value={r.id}>
                           {r.name}
                         </option>
                       ))}

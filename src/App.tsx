@@ -497,6 +497,14 @@ export default function App() {
 
   const handleConvertLeadToClient = async (lead: Lead) => {
     if (!user?.ownerId) return;
+    
+    // Check if this lead was already converted to a client
+    const existingClient = clientes.find(c => c.leadId === lead.id);
+    if (existingClient) {
+      console.log('Lead already converted to client');
+      return;
+    }
+
     const clientPayload: Omit<Cliente, 'id'> = {
       ownerId: user.ownerId,
       leadId: lead.id,
@@ -510,8 +518,44 @@ export default function App() {
       createdAt: new Date().toISOString().split('T')[0]
     };
     try {
-      await addItem<Cliente>('clientes', clientPayload, user.ownerId);
+      const newClientId = await addItem<Cliente>('clientes', clientPayload, user.ownerId);
       await updateItem<Lead>('leads', lead.id, { status: 'Cliente' }, user.ownerId);
+
+      // 3. RE-LINK PROPOSALS: Any proposal that points to this lead's ID should now point to the Client's ID
+      const proposalsToUpdate = propostas.filter(p => p.clientId === lead.id);
+      for (const proposal of proposalsToUpdate) {
+        await updateItem<Proposta>('propostas', proposal.id, { 
+          clientId: newClientId,
+          clientName: lead.company || lead.name
+        }, user.ownerId);
+      }
+
+      // 4. RE-LINK AGENDA/MEETINGS: Same for meetings
+      const meetingsToUpdate = agenda.filter(a => a.linkedId === lead.id);
+      for (const meeting of meetingsToUpdate) {
+        await updateItem<EventAgenda>('agenda', meeting.id, { 
+          linkedId: newClientId,
+          linkedName: lead.company || lead.name,
+          linkedType: 'client'
+        }, user.ownerId);
+      }
+
+      // 5. RE-LINK FOLLOW-UPS
+      const followUpsToUpdate = followUps.filter(f => f.leadId === lead.id);
+      for (const followUp of followUpsToUpdate) {
+        await updateItem<FollowUp>('followups', followUp.id, { 
+          leadId: newClientId // We use the same field but now with Client ID
+        }, user.ownerId);
+      }
+
+      // 6. RE-LINK DOCUMENTS
+      const documentsToUpdate = documentos.filter(d => d.entityId === lead.id);
+      for (const doc of documentsToUpdate) {
+        await updateItem<Documento>('documentos', doc.id, { 
+          entityId: newClientId,
+          entityType: 'client'
+        }, user.ownerId);
+      }
     } catch (err) {
       console.error('Error converting lead to client:', err);
     }
@@ -531,25 +575,33 @@ export default function App() {
 
         const associatedLead = leads.find((l) => l.id === proposal.clientId);
         if (associatedLead) {
-          const clientPayload: Omit<Cliente, 'id'> = {
-            ownerId: user.ownerId,
-            leadId: associatedLead.id,
-            name: associatedLead.name,
-            companyName: associatedLead.company,
-            phone: associatedLead.phone,
-            email: associatedLead.email,
-            cnpj: associatedLead.cnpj,
-            address: associatedLead.address,
-            status: 'Ativo',
-            createdAt: new Date().toISOString().split('T')[0]
-          };
-          try {
-            const newClientId = await addItem<Cliente>('clientes', clientPayload, user.ownerId);
-            linkedClientId = newClientId;
-            finalClientName = associatedLead.company || associatedLead.name;
-            await updateItem<Lead>('leads', associatedLead.id, { status: 'Cliente' }, user.ownerId);
-          } catch (err) {
-            console.error('Error auto-converting lead in proposal cascade:', err);
+          // Check if this lead was already converted to a client to avoid duplicates
+          const existingClient = clientes.find(c => c.leadId === associatedLead.id);
+          
+          if (existingClient) {
+            linkedClientId = existingClient.id;
+            finalClientName = existingClient.companyName || existingClient.name;
+          } else {
+            const clientPayload: Omit<Cliente, 'id'> = {
+              ownerId: user.ownerId,
+              leadId: associatedLead.id,
+              name: associatedLead.name,
+              companyName: associatedLead.company,
+              phone: associatedLead.phone,
+              email: associatedLead.email,
+              cnpj: associatedLead.cnpj,
+              address: associatedLead.address,
+              status: 'Ativo',
+              createdAt: new Date().toISOString().split('T')[0]
+            };
+            try {
+              const newClientId = await addItem<Cliente>('clientes', clientPayload, user.ownerId);
+              linkedClientId = newClientId;
+              finalClientName = associatedLead.company || associatedLead.name;
+              await updateItem<Lead>('leads', associatedLead.id, { status: 'Cliente' }, user.ownerId);
+            } catch (err) {
+              console.error('Error auto-converting lead in proposal cascade:', err);
+            }
           }
         }
 

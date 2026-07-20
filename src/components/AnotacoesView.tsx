@@ -611,7 +611,7 @@ export default function AnotacoesView({
           display: block;
         }
         .notion-editor-sheet:empty::before {
-          content: attr(placeholder);
+          content: attr(data-placeholder);
           color: #94a3b8;
           pointer-events: none;
           display: block;
@@ -1226,7 +1226,7 @@ export default function AnotacoesView({
                       contentEditable={drawingTool === 'cursor'}
                       onPaste={handlePaste}
                       onClick={handleEditorClick}
-                      placeholder="Digite livremente na nota. Você pode colar imagens (Ctrl+V) ou arrastá-las aqui..."
+                      data-placeholder="Digite livremente na nota. Você pode colar imagens (Ctrl+V) ou arrastá-las aqui..."
                       className="w-full p-8 text-xs text-slate-800 dark:text-slate-100 outline-none leading-relaxed select-text notion-editor-sheet"
                       style={{ minHeight: '440px' }}
                     />

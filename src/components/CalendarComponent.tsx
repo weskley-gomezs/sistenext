@@ -62,8 +62,8 @@ export default function CalendarComponent({ events, onEventDrop, onSelectEvent }
       <DnDCalendar
         localizer={localizer}
         events={formattedEvents}
-        startAccessor="start"
-        endAccessor="end"
+        startAccessor={(event: any) => event.start}
+        endAccessor={(event: any) => event.end}
         style={{ height: '100%' }}
         onEventDrop={handleEventDrop}
         onSelectEvent={onSelectEvent}

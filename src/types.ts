@@ -67,6 +67,7 @@ export interface FollowUp {
   nextAction?: string;
   nextActionDate?: string;
   deletionJustification?: string;
+  createdBy?: string;
 }
 
 export interface Empresa {
@@ -109,6 +110,7 @@ export interface Cliente {
   lastMaintenanceDate?: string;
   lastMaintenanceNotes?: string;
   deletionJustification?: string;
+  createdBy?: string;
 }
 
 export interface ChecklistItem {
@@ -146,6 +148,7 @@ export interface Projeto {
   checklist: ChecklistItem[];
   files: string[];
   deletionJustification?: string;
+  createdBy?: string;
 }
 
 export interface PropostaServico {
@@ -183,6 +186,7 @@ export interface Contrato {
   fileUrl?: string;
   fileName?: string;
   deletionJustification?: string;
+  createdBy?: string;
 }
 
 export interface Financeiro {
@@ -244,6 +248,7 @@ export interface EventAgenda {
   meetingUrl?: string;
   status?: 'Pendente' | 'Concluído' | 'Cancelado';
   deletionJustification?: string;
+  createdBy?: string;
 }
 
 export type AgendaItem = EventAgenda;
@@ -260,6 +265,7 @@ export interface Documento {
   entityId?: string;
   entityType?: 'client' | 'lead' | 'project';
   deletionJustification?: string;
+  createdBy?: string;
 }
 
 export interface Anotacao {
@@ -276,6 +282,7 @@ export interface Anotacao {
   scheduledDate?: string;
   user: string;
   deletionJustification?: string;
+  createdBy?: string;
 }
 
 export interface AppConfig {

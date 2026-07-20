@@ -263,6 +263,7 @@ export default function LeadsView({
     const matchesValue = !filterMinVal || lead.estimatedValue >= Number(filterMinVal);
 
     return (
+      lead.status !== 'Cliente' &&
       matchesSearch &&
       matchesSegment &&
       matchesCity &&

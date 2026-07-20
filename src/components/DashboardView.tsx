@@ -106,8 +106,18 @@ export default function DashboardView({
   const hasImminent = todayEvents.some((e) => e.isImminent);
 
   // 1. Calculations & Metrics
+  const uniqueClients = React.useMemo(() => {
+    const seen = new Set();
+    return clientes.filter(cli => {
+      const key = cli.leadId || `${cli.companyName}-${cli.name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [clientes]);
+
   const totalLeads = leads.length;
-  const activeClients = clientes.filter((c) => c.status === 'Ativo').length;
+  const activeClients = uniqueClients.filter((c) => c.status === 'Ativo').length;
   const runningProjects = projetos.filter((p) => p.status !== 'Concluído').length;
   const pendingProposals = propostas.filter((p) => p.status === 'Pendente').length;
 
@@ -201,7 +211,7 @@ export default function DashboardView({
 
   const itemVariants = {
     hidden: { y: 15, opacity: 0 },
-    show: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } }
+    show: { y: 0, opacity: 1, transition: { type: 'spring' as const, stiffness: 100 } }
   };
 
   return (

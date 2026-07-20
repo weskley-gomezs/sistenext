@@ -91,7 +91,9 @@ export default function PropostasView({
 
   // List of potential recipients (can be leads or active clients!)
   const recipients = [
-    ...leads.map((l) => ({ id: l.id, name: `${l.company} (${l.name})`, type: 'Lead' })),
+    ...leads
+      .filter((l) => l.status !== 'Cliente')
+      .map((l) => ({ id: l.id, name: `${l.company} (${l.name})`, type: 'Lead' })),
     ...clientes.map((c) => ({ id: c.id, name: `${c.companyName} (${c.name})`, type: 'Cliente' }))
   ];
 
