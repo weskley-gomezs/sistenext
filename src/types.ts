@@ -105,6 +105,7 @@ export interface Cliente {
   createdAt: string;
   contractValue?: number;
   contractType?: 'Fixo' | 'Recorrente';
+  paymentTerms?: 'A vista' | '50/50' | 'Mensal' | 'Personalizado';
   hasMaintenance?: boolean;
   maintenancePeriod?: string;
   lastMaintenanceDate?: string;
@@ -168,6 +169,8 @@ export interface Proposta {
   services: PropostaServico[];
   discount: number;
   status: 'Pendente' | 'Aceita' | 'Recusada' | 'Expirada';
+  contractType?: 'Fixo' | 'Recorrente';
+  paymentTerms?: 'A vista' | '50/50' | 'Mensal' | 'Personalizado';
   createdAt: string;
   deletionJustification?: string;
   createdBy?: string;
@@ -187,6 +190,13 @@ export interface Contrato {
   fileName?: string;
   deletionJustification?: string;
   createdBy?: string;
+  contractType?: 'Fixo' | 'Recorrente';
+  paymentDueDate?: string;
+  paymentDueDay?: number;
+  paymentTerms?: 'A vista' | '50/50' | 'Mensal' | 'Personalizado';
+  hasFine?: boolean;
+  fineType?: 'Dia' | 'Mes';
+  fineValue?: number;
 }
 
 export interface Financeiro {

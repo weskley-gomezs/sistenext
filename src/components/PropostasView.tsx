@@ -56,6 +56,7 @@ export default function PropostasView({
   config
 }: PropostasViewProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null);
   const [selectedProposalForPrint, setSelectedProposalForPrint] = useState<Proposta | null>(null);
   const [itemToDeleteId, setItemToDeleteId] = useState<string | null>(null);
   
@@ -69,6 +70,8 @@ export default function PropostasView({
   const [clientId, setClientId] = useState('');
   const [validity, setValidity] = useState('');
   const [discount, setDiscount] = useState(0);
+  const [contractType, setContractType] = useState<'Fixo' | 'Recorrente'>('Fixo');
+  const [paymentTerms, setPaymentTerms] = useState<'A vista' | '50/50' | 'Mensal' | 'Personalizado'>('A vista');
 
   // Structured fields for Organized proposal creation
   const [selectedTemplate, setSelectedTemplate] = useState('custom');
@@ -91,10 +94,8 @@ export default function PropostasView({
 
   // List of potential recipients (can be leads or active clients!)
   const recipients = [
-    ...leads
-      .filter((l) => l.status !== 'Cliente')
-      .map((l) => ({ id: l.id, name: `${l.company} (${l.name})`, type: 'Lead' })),
-    ...clientes.map((c) => ({ id: c.id, name: `${c.companyName} (${c.name})`, type: 'Cliente' }))
+    ...leads.map((l) => ({ id: l.id, name: `${l.company || l.name} (${l.name})`, type: 'Lead' })),
+    ...clientes.map((c) => ({ id: c.id, name: `${c.companyName || c.name} (${c.name})`, type: 'Cliente' }))
   ];
 
   const handleTemplateChange = (templateKey: string) => {
@@ -194,6 +195,24 @@ export default function PropostasView({
     setServices(services.filter((_, i) => i !== idx));
   };
 
+  const handleEdit = (prop: Proposta) => {
+    setEditingProposalId(prop.id);
+    setClientId(prop.clientId);
+    setValidity(prop.validity);
+    setDiscount(prop.discount);
+    setContractType(prop.contractType || 'Fixo');
+    setPaymentTerms(prop.paymentTerms || 'A vista');
+    setServices(prop.services);
+    
+    const sections = parseDescription(prop.description);
+    setObjetivo(sections.objetivo);
+    setEscopo(sections.escopo);
+    setPrazos(sections.prazos);
+    setTermos(sections.termos);
+    
+    setIsOpen(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -216,21 +235,36 @@ export default function PropostasView({
     // Combine structured sections with specific tags for clean parsing
     const combinedDescription = `[OBJETIVO]\n${objetivo}\n\n[ESCOPO]\n${escopo}\n\n[PRAZOS]\n${prazos}\n\n[TERMOS]\n${termos}`;
 
-    const payload: Omit<Proposta, 'id'> = {
-      number: sequenceNumber,
-      clientId,
-      clientName: recipient.name.split(' (')[0],
-      value: finalValue,
-      validity,
-      description: combinedDescription,
-      services,
-      discount,
-      status: 'Pendente',
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-
     try {
-      await onAddProposta(payload);
+      if (editingProposalId) {
+        await onUpdateProposta(editingProposalId, {
+          clientId,
+          clientName: recipient.name.split(' (')[0],
+          value: finalValue,
+          validity,
+          description: combinedDescription,
+          services,
+          discount,
+          contractType,
+          paymentTerms
+        });
+      } else {
+        const payload: Omit<Proposta, 'id'> = {
+          number: sequenceNumber,
+          clientId,
+          clientName: recipient.name.split(' (')[0],
+          value: finalValue,
+          validity,
+          description: combinedDescription,
+          services,
+          discount,
+          status: 'Pendente',
+          contractType,
+          paymentTerms,
+          createdAt: new Date().toISOString().split('T')[0]
+        };
+        await onAddProposta(payload);
+      }
       setIsOpen(false);
       resetForm();
     } catch (err) {
@@ -359,6 +393,9 @@ export default function PropostasView({
     setServices([]);
     setServiceName('');
     setServicePrice(0);
+    setContractType('Fixo');
+    setPaymentTerms('A vista');
+    setEditingProposalId(null);
     setSelectedTemplate('custom');
     setObjetivo('');
     setEscopo('');
@@ -689,6 +726,15 @@ export default function PropostasView({
                   </div>
 
                   <div className="flex gap-1">
+                    {prop.status === 'Pendente' && (
+                      <button
+                        onClick={() => handleEdit(prop)}
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-500 transition-colors cursor-pointer"
+                        title="Editar Proposta"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                    )}
                     <button
                       onClick={() => setSelectedProposalForPrint(prop)}
                       className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-500 transition-colors cursor-pointer"
@@ -712,7 +758,16 @@ export default function PropostasView({
                 {/* Pricing summary */}
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
                   <div>
-                    <span className="text-[9px] text-slate-400 uppercase font-bold block">Valor Líquido</span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] text-slate-400 uppercase font-bold block">Valor Líquido</span>
+                      <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${
+                        prop.contractType === 'Recorrente' 
+                          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' 
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                      }`}>
+                        {prop.contractType || 'Fixo'}
+                      </span>
+                    </div>
                     <span className="text-md font-black text-indigo-600 dark:text-indigo-400 font-mono">
                       {formatBRL(prop.value)}
                     </span>
@@ -1036,7 +1091,7 @@ export default function PropostasView({
             >
               <div className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-900 mb-6">
                 <h3 className="text-md font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  Gerar Proposta Comercial
+                  {editingProposalId ? 'Editar Proposta Comercial' : 'Gerar Proposta Comercial'}
                 </h3>
                 <button
                   onClick={() => setIsOpen(false)}
@@ -1089,6 +1144,33 @@ export default function PropostasView({
                       onChange={(e) => setDiscount(Number(e.target.value))}
                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-mono"
                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Tipo de Contrato</label>
+                    <select
+                      value={contractType}
+                      onChange={(e) => setContractType(e.target.value as any)}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-bold text-xs"
+                    >
+                      <option value="Fixo">Fixo (Projeto Único)</option>
+                      <option value="Recorrente">Recorrente (Mensalidade)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Condições de Pagamento</label>
+                    <select
+                      value={paymentTerms}
+                      onChange={(e) => setPaymentTerms(e.target.value as any)}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none font-bold text-xs"
+                    >
+                      <option value="A vista">À Vista (100%)</option>
+                      <option value="50/50">50% Início / 50% Entrega</option>
+                      <option value="Mensal">Mensal (Recorrência)</option>
+                      <option value="Personalizado">Personalizado (Ver Descrição)</option>
+                    </select>
                   </div>
                 </div>
 

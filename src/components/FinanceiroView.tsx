@@ -174,6 +174,9 @@ export default function FinanceiroView({
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   };
 
+  const selectedClientData = clientes.find(c => c.companyName === clientName);
+  const currentPaymentTerms = selectedClientData?.paymentTerms;
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto font-sans relative">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -531,6 +534,176 @@ export default function FinanceiroView({
         }}
         onCancel={() => setItemToDelete(null)}
       />
+
+      {/* CREATE TRANSACTION MODAL */}
+      <AnimatePresence>
+        {isOpen && (
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.6 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsOpen(false)}
+              className="fixed inset-0 bg-black/80"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className="relative w-full max-w-md bg-white dark:bg-slate-950 h-full shadow-2xl flex flex-col z-10 p-6 border-l border-slate-200 dark:border-slate-800 overflow-y-auto"
+            >
+              <div className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">
+                <h3 className="text-md font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Lançar Nova Transação
+                </h3>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSave} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Descrição do Lançamento *</label>
+                  <input
+                    required
+                    type="text"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Ex: Pagamento Mensalidade Julho"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:outline-none font-bold text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Tipo</label>
+                    <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setType('Receber')}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${
+                          type === 'Receber' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-400'
+                        }`}
+                      >
+                        Entrada
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setType('Pagar')}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${
+                          type === 'Pagar' ? 'bg-white dark:bg-slate-800 text-red-500 shadow-sm' : 'text-slate-400'
+                        }`}
+                      >
+                        Saída
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Status</label>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as any)}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:outline-none font-bold text-xs"
+                    >
+                      <option value="Pendente">Pendente</option>
+                      <option value="Recebido">Confirmado / Pago</option>
+                      <option value="Vencido">Vencido</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Categoria</label>
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value as any)}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:outline-none font-bold text-xs"
+                    >
+                      <option value="Mensalidade">Mensalidade</option>
+                      <option value="Venda">Venda Única</option>
+                      <option value="Comissão">Comissão</option>
+                      <option value="Custo">Custo Fixo</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Valor (R$)</label>
+                    <input
+                      required
+                      type="number"
+                      step="0.01"
+                      value={value}
+                      onChange={(e) => setValue(Number(e.target.value))}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:outline-none font-mono font-bold text-indigo-600"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Data de Vencimento</label>
+                  <input
+                    required
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:outline-none font-bold text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Cliente Vinculado (Opcional)</label>
+                  <select
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:outline-none font-bold text-xs"
+                  >
+                    <option value="">Nenhum vínculo</option>
+                    {clientes.map(c => (
+                      <option key={c.id} value={c.companyName}>
+                        {c.companyName} ({c.name})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Método de Pagamento</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:outline-none font-bold text-xs"
+                  >
+                    <option value="Pix">Pix</option>
+                    <option value="Boleto">Boleto</option>
+                    <option value="Crédito">Cartão de Crédito</option>
+                    <option value="Débito">Cartão de Débito</option>
+                    <option value="Dinheiro">Dinheiro / Espécie</option>
+                  </select>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-500/20 transition-all cursor-pointer"
+                  >
+                    Confirmar Lançamento
+                  </button>
+                  {currentPaymentTerms === '50/50' && type === 'Receber' && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold text-center mt-2">
+                      ⚠️ Este lançamento refere-se a uma proposta 50/50. Considere lançar a segunda parcela separadamente.
+                    </p>
+                  )}
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
 
     </div>

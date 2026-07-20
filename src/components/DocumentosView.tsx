@@ -1,5 +1,24 @@
 import React, { useState } from 'react';
-import { UploadCloud, FileText, CheckCircle2, Search, Trash2, Download, Eye, Tag, FileSignature } from 'lucide-react';
+import { 
+  UploadCloud, 
+  FileText, 
+  CheckCircle2, 
+  Search, 
+  Trash2, 
+  Download, 
+  Eye, 
+  Tag, 
+  FileSignature, 
+  X, 
+  Calendar, 
+  DollarSign, 
+  User, 
+  Briefcase, 
+  AlertCircle,
+  TrendingUp,
+  Layers,
+  Sparkles
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Documento, Proposta, Contrato } from '../types';
 import { ConfirmModal } from './ConfirmModal';
@@ -23,6 +42,11 @@ export default function DocumentosView({
   const [activeTab, setActiveTab] = useState<'all' | 'upload' | 'proposal' | 'contract'>('all');
   const [dragActive, setDragActive] = useState(false);
   const [itemToDeleteId, setItemToDeleteId] = useState<string | null>(null);
+  const [selectedDocForPreview, setSelectedDocForPreview] = useState<any | null>(null);
+
+  const formatBRL = (val: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  };
 
   // Combine real documents with generated proposals and signed contracts for a unified corporate storage experience!
   const unifiedDocs: {
@@ -34,6 +58,7 @@ export default function DocumentosView({
     source: string;
     tabType: 'all' | 'upload' | 'proposal' | 'contract';
     content?: string;
+    originalItem?: any;
   }[] = [
     ...documentos.map((d) => ({
       id: d.id,
@@ -42,7 +67,8 @@ export default function DocumentosView({
       size: d.size || '340 KB',
       createdAt: d.uploadedAt,
       source: 'Upload',
-      tabType: 'upload' as const
+      tabType: 'upload' as const,
+      originalItem: d
     })),
     ...propostas.map((p) => ({
       id: p.id,
@@ -51,7 +77,8 @@ export default function DocumentosView({
       size: '250 KB',
       createdAt: p.createdAt,
       source: 'Sistema',
-      tabType: 'proposal' as const
+      tabType: 'proposal' as const,
+      originalItem: p
     })),
     ...contratos.map((c) => ({
       id: c.id,
@@ -61,7 +88,8 @@ export default function DocumentosView({
       createdAt: c.date,
       source: 'Contratos',
       tabType: 'contract' as const,
-      content: c.content
+      content: c.content,
+      originalItem: c
     }))
   ];
 
@@ -132,6 +160,32 @@ export default function DocumentosView({
       }
     }
   };
+
+  const handleDownloadFile = (doc: any) => {
+    let fileContent = '';
+    let fileName = doc.name;
+    
+    if (doc.tabType === 'contract') {
+      fileContent = doc.content || `CONTRATO DE PRESTAÇÃO DE SERVIÇOS\n\nContratante: ${doc.originalItem?.clientName}\nTítulo: ${doc.originalItem?.title}\nValor: ${formatBRL(doc.originalItem?.value || 0)}\nData: ${doc.originalItem?.date}`;
+    } else if (doc.tabType === 'proposal') {
+      const p = doc.originalItem;
+      const servicesText = p?.services?.map((s: any) => `- ${s.name}: ${formatBRL(s.price)}`).join('\n') || '';
+      fileContent = `PROPOSTA COMERCIAL ${p?.number || ''}\n\nCliente: ${p?.clientName}\nValor: ${formatBRL(p?.value || 0)}\nValidade: ${p?.validity || ''}\nDescrição: ${p?.description || ''}\n\nServiços:\n${servicesText}`;
+    } else {
+      fileContent = `DOCUMENTO CENTRAL GED\n\nNome do Arquivo: ${doc.name}\nTamanho: ${doc.size}\nData de Envio: ${doc.createdAt}\nFonte: ${doc.source}`;
+    }
+
+    const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName.endsWith('.pdf') ? fileName.replace('.pdf', '.txt') : fileName + '.txt';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto font-sans relative">
@@ -224,8 +278,8 @@ export default function DocumentosView({
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
             >
               <div>
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2.5">
+                <div className="flex justify-between items-start gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-9 h-9 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center shrink-0">
                       {doc.type === 'contract' ? <FileSignature size={18} /> : <FileText size={18} />}
                     </div>
@@ -233,9 +287,9 @@ export default function DocumentosView({
                       <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded font-extrabold uppercase">
                         {doc.source}
                       </span>
-                      <h3 className="font-extrabold text-xs text-slate-900 dark:text-white mt-1 leading-tight truncate">
-                        {doc.name}
-                      </h3>
+                    <h3 className="font-extrabold text-xs text-slate-900 dark:text-white mt-1 leading-tight truncate" title={doc.name}>
+                      {doc.name}
+                    </h3>
                     </div>
                   </div>
 
@@ -258,19 +312,13 @@ export default function DocumentosView({
               {/* Action buttons */}
               <div className="mt-5 pt-3.5 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs font-bold text-center">
                 <button
-                  onClick={() => {
-                    if (doc.tabType === 'contract' && doc.content) {
-                      alert(`--- CONTEÚDO DO CONTRATO ---\n\n${doc.content.substring(0, 500)}${doc.content.length > 500 ? '...' : ''}`);
-                    } else {
-                      alert('Simulando abertura do arquivo corporativo em nova aba.');
-                    }
-                  }}
+                  onClick={() => setSelectedDocForPreview(doc)}
                   className="py-1.5 px-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 rounded-lg cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <Eye size={12} /> Visualizar
                 </button>
                 <button
-                  onClick={() => alert('Download do arquivo simulado com sucesso.')}
+                  onClick={() => handleDownloadFile(doc)}
                   className="py-1.5 px-2 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white rounded-lg cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <Download size={12} /> Baixar
@@ -296,6 +344,283 @@ export default function DocumentosView({
         }}
         onCancel={() => setItemToDeleteId(null)}
       />
+
+      {/* Visual Doc Preview Modal */}
+      <AnimatePresence>
+        {selectedDocForPreview && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center gap-4 bg-slate-50 dark:bg-slate-950/40">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 bg-indigo-500/10 text-indigo-500 rounded-lg flex items-center justify-center shrink-0">
+                    {selectedDocForPreview.tabType === 'contract' ? <FileSignature size={16} /> : <FileText size={16} />}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[9px] bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.2 rounded font-black uppercase">
+                      {selectedDocForPreview.source}
+                    </span>
+                    <h2 className="text-xs font-black text-slate-900 dark:text-white truncate" title={selectedDocForPreview.name}>
+                      {selectedDocForPreview.name}
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDownloadFile(selectedDocForPreview)}
+                    className="p-2 bg-slate-200/60 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
+                    title="Baixar Arquivo"
+                  >
+                    <Download size={14} />
+                    <span className="hidden sm:inline">Baixar</span>
+                  </button>
+                  <button
+                    onClick={() => setSelectedDocForPreview(null)}
+                    className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 rounded-xl cursor-pointer transition-all"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body / Viewer */}
+              <div className="p-6 overflow-y-auto flex-1 bg-slate-100 dark:bg-slate-950">
+                {selectedDocForPreview.tabType === 'contract' && (
+                  <div className="bg-white text-slate-800 p-8 sm:p-12 shadow-sm border border-slate-200/60 rounded-xl max-w-3xl mx-auto font-serif text-xs sm:text-sm leading-relaxed whitespace-pre-line relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-blue-500 to-indigo-600" />
+                    
+                    <div className="text-center mb-8">
+                      <h3 className="text-base sm:text-lg font-bold uppercase tracking-tight text-slate-950">
+                        CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TECNOLOGIA
+                      </h3>
+                      <p className="text-[10px] text-slate-500 font-sans uppercase font-bold mt-1">
+                        Sistenext Solutions & IA
+                      </p>
+                    </div>
+
+                    {selectedDocForPreview.content ? (
+                      <div className="font-serif leading-relaxed text-slate-800 text-justify">
+                        {selectedDocForPreview.content}
+                      </div>
+                    ) : (
+                      <div className="space-y-4 text-justify">
+                        <p>
+                          Pelo presente instrumento particular de contrato, de um lado como <strong>CONTRATADA</strong>, a empresa <strong>SISTENEXT SOLUTIONS LTDA</strong>, inscrita no CNPJ sob o nº 42.109.823/0001-90, e de outro lado como <strong>CONTRATANTE</strong>, a empresa identificada como <strong>{selectedDocForPreview.originalItem?.clientName || 'Cliente final'}</strong>.
+                        </p>
+                        <p>
+                          <strong>CLÁUSULA PRIMEIRA - DO OBJETO:</strong> O presente contrato tem por objeto a prestação de serviços técnicos especializados de desenvolvimento de software, consultoria de processos de inteligência artificial e/ou manutenção de sistemas, de acordo com o escopo homologado em proposta comercial complementar.
+                        </p>
+                        <p>
+                          <strong>CLÁUSULA SEGUNDA - DOS VALORES E CONDIÇÕES:</strong> Pelo objeto deste instrumento, a CONTRATANTE pagará à CONTRATADA o valor total de <strong>{formatBRL(selectedDocForPreview.originalItem?.value || 0)}</strong>, sob as condições de pagamento: <strong>{selectedDocForPreview.originalItem?.paymentTerms || 'A vista'}</strong>.
+                        </p>
+                        {selectedDocForPreview.originalItem?.contractType === 'Recorrente' ? (
+                          <p>
+                            Os pagamentos de recorrência (mensalidades) deverão ser quitados impreterivelmente todo dia <strong>{selectedDocForPreview.originalItem?.paymentDueDay || 15}</strong> de cada mês subsequente, sob pena de incidência de multa por atraso acordada entre as partes.
+                          </p>
+                        ) : (
+                          <p>
+                            O pagamento fixo acordado deverá ser liquidado até o dia de vencimento limite <strong>{selectedDocForPreview.originalItem?.paymentDueDate?.split('-').reverse().join('/') || 'definido em fatura'}</strong>.
+                          </p>
+                        )}
+                        <p>
+                          <strong>CLÁUSULA TERCEIRA - DA VIGÊNCIA:</strong> Este acordo inicia-se na data de assinatura digital do documento e possui vigência conforme especificado no projeto vinculativo.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Signatures */}
+                    <div className="mt-16 pt-8 border-t border-slate-200/80 grid grid-cols-2 gap-8 text-center text-[10px] sm:text-xs font-sans">
+                      <div>
+                        <div className="w-full border-b border-slate-300 h-8" />
+                        <span className="block font-bold text-slate-900 mt-2">SISTENEXT SOLUTIONS LTDA</span>
+                        <span className="text-slate-500">CONTRATADA (CONTRATO ASSINADO DIGITALMENTE)</span>
+                      </div>
+                      <div>
+                        <div className="w-full border-b border-slate-300 h-8" />
+                        <span className="block font-bold text-slate-900 mt-2">
+                          {selectedDocForPreview.originalItem?.clientName?.toUpperCase() || 'CONTRATANTE'}
+                        </span>
+                        <span className="text-slate-500">REPRESENTANTE LEGAL</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedDocForPreview.tabType === 'proposal' && (
+                  (() => {
+                    const prop = selectedDocForPreview.originalItem;
+                    const subtotal = prop?.services?.reduce((sum: number, s: any) => sum + s.price, 0) || prop?.value || 0;
+                    return (
+                      <div className="bg-white text-slate-800 p-8 sm:p-12 shadow-sm border border-slate-200/60 rounded-xl max-w-3xl mx-auto font-sans text-xs sm:text-sm leading-relaxed relative overflow-hidden">
+                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500" />
+                        
+                        {/* Header */}
+                        <div className="flex justify-between items-start gap-4 pb-6 border-b border-slate-100">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1 text-indigo-600 font-black tracking-tighter text-sm">
+                              <Sparkles size={14} className="text-indigo-500" />
+                              <span>SISTENEXT SOLUTIONS</span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-none">Criação de Sistemas & Inteligência Artificial</p>
+                            <p className="text-[9px] text-slate-400 font-mono">contato@sistenext.com.br | (11) 98765-4321</p>
+                          </div>
+                          <div className="text-right space-y-1">
+                            <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                              PROPOSTA COMERCIAL
+                            </span>
+                            <h3 className="text-xs sm:text-sm font-black font-mono text-slate-900">
+                              Nº {prop?.number || 'N/A'}
+                            </h3>
+                          </div>
+                        </div>
+
+                        {/* Customer Info */}
+                        <div className="my-6 grid grid-cols-2 gap-4 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                          <div>
+                            <span className="text-[9px] text-slate-400 uppercase font-bold block mb-0.5">CONTRATANTE</span>
+                            <span className="font-extrabold text-slate-900">{prop?.clientName || 'Cliente'}</span>
+                            <span className="text-[10px] text-slate-500 block mt-1">Status: {prop?.status || 'Pendente'}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] text-slate-400 uppercase font-bold block mb-0.5">CRONOGRAMA</span>
+                            <span className="block">Emissão: <strong className="font-mono">{prop?.createdAt?.split('-').reverse().join('/') || 'N/A'}</strong></span>
+                            <span className="block mt-0.5">Validade: <strong className="font-mono text-rose-500">{prop?.validity?.split('-').reverse().join('/') || 'N/A'}</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        <div className="my-5">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase mb-1">Visão Geral da Proposta</h4>
+                          <p className="text-xs text-slate-600 leading-relaxed italic">
+                            {prop?.description || 'Desenvolvimento e sustentação de solução de tecnologia conforme escopo homologado.'}
+                          </p>
+                        </div>
+
+                        {/* Services List */}
+                        <div className="my-6">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase mb-2">Itens e Serviços Propostos</h4>
+                          <div className="border border-slate-150 rounded-xl overflow-hidden text-xs">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black uppercase text-slate-500">
+                                  <th className="p-3">Descrição do Serviço / Tecnologia</th>
+                                  <th className="p-3 text-right">Valor Unitário</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {prop?.services && prop.services.length > 0 ? (
+                                  prop.services.map((srv: any, i: number) => (
+                                    <tr key={i} className="border-b border-slate-100 last:border-none">
+                                      <td className="p-3 font-semibold text-slate-800">{srv.name}</td>
+                                      <td className="p-3 text-right font-mono font-bold text-slate-900">{formatBRL(srv.price)}</td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr>
+                                    <td className="p-3 font-semibold text-slate-800">Desenvolvimento de Software / Consultoria IA</td>
+                                    <td className="p-3 text-right font-mono font-bold text-slate-900">{formatBRL(subtotal)}</td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Financial Conditions */}
+                        <div className="my-6 grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-[9px] text-slate-400 uppercase font-bold block mb-1">CONDIÇÕES COMERCIAIS</span>
+                            <div className="space-y-1 text-xs">
+                              <p>Modalidade: <strong className="bg-slate-100 px-1.5 py-0.2 rounded text-[10px] uppercase">{prop?.contractType || 'Fixo'}</strong></p>
+                              <p>Pagamento: <strong>{prop?.paymentTerms || 'A vista'}</strong></p>
+                            </div>
+                          </div>
+                          
+                          <div className="bg-indigo-50/50 border border-indigo-100 p-3 rounded-xl flex flex-col justify-center items-end text-right">
+                            <span className="text-[9px] text-slate-400 uppercase font-bold block mb-1">VALOR TOTAL ACORDADO</span>
+                            <span className="text-slate-500 text-[10px] line-through font-mono leading-none">
+                              {prop?.discount && prop.discount > 0 ? formatBRL(subtotal) : ''}
+                            </span>
+                            <span className="text-base sm:text-lg font-black text-indigo-600 font-mono leading-tight">
+                              {formatBRL(prop?.value || subtotal)}
+                            </span>
+                            {prop?.discount && prop.discount > 0 ? (
+                              <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.2 rounded-md mt-1">
+                                Desconto Aplicado: {formatBRL(prop.discount)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+
+                {selectedDocForPreview.tabType === 'upload' && (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-2xl max-w-2xl mx-auto flex flex-col items-center text-center space-y-6 shadow-sm">
+                    <div className="w-16 h-16 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-3xl flex items-center justify-center">
+                      <FileText size={32} />
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        Arquivo Central GED Guardado
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md italic">
+                        "{selectedDocForPreview.name}" foi enviado com sucesso via upload externo e está armazenado de forma criptografada nos servidores da SisteNext.
+                      </p>
+                    </div>
+
+                    <div className="w-full border-t border-slate-100 dark:border-slate-800/80 pt-4 space-y-2.5 text-xs text-left text-slate-600 dark:text-slate-400 font-mono">
+                      <div className="flex justify-between">
+                        <span>Extensão de Arquivo:</span>
+                        <span className="font-bold text-slate-900 dark:text-white uppercase">{selectedDocForPreview.name.split('.').pop() || 'Desconhecido'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Tamanho em Disco:</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{selectedDocForPreview.size}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Data do Envio:</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{selectedDocForPreview.createdAt.split('-').reverse().join('/')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Status de Segurança:</span>
+                        <span className="font-bold text-emerald-500 flex items-center gap-1">
+                          <CheckCircle2 size={12} /> Verificado & Limpo
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Criptografia GED:</span>
+                        <span className="font-bold text-slate-900 dark:text-white">AES-256 GCM at Rest</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleDownloadFile(selectedDocForPreview)}
+                      className="w-full py-2.5 bg-slate-950 hover:bg-slate-800 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-indigo-500/10"
+                    >
+                      <Download size={14} /> Baixar Cópia Local
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+

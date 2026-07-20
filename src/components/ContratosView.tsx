@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, FileText, CheckCircle2, AlertCircle, FileSignature, Calendar, User, DollarSign, X, Trash2, Printer } from 'lucide-react';
+import { Plus, FileText, CheckCircle2, AlertCircle, FileSignature, Calendar, User, DollarSign, X, Trash2, Printer, FileDown, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Contrato, Cliente } from '../types';
 import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { ConfirmModal } from './ConfirmModal';
+import jsPDF from 'jspdf';
 
 interface ContratosViewProps {
   contratos: Contrato[];
@@ -32,14 +33,92 @@ export default function ContratosView({
   };
 
   // Form Fields
+  const [editingCont, setEditingCont] = useState<Contrato | null>(null);
   const [clientId, setClientId] = useState('');
   const [title, setTitle] = useState('');
   const [value, setValue] = useState(0);
   const [status, setStatus] = useState<'Assinado' | 'Pendente'>('Pendente');
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [fileName, setFileName] = useState('');
   const [content, setContent] = useState('');
   const [contToDelete, setContToDelete] = useState<string | null>(null);
+
+  // New Contract Payment & Compliance Fields
+  const [contractType, setContractType] = useState<'Fixo' | 'Recorrente'>('Fixo');
+  const [paymentDueDate, setPaymentDueDate] = useState('');
+  const [paymentDueDay, setPaymentDueDay] = useState<number>(15);
+  const [paymentTerms, setPaymentTerms] = useState<'A vista' | '50/50' | 'Mensal' | 'Personalizado'>('A vista');
+  const [hasFine, setHasFine] = useState(false);
+  const [fineType, setFineType] = useState<'Dia' | 'Mes'>('Dia');
+  const [fineValue, setFineValue] = useState(0);
+
+  const handleExportPDF = (cont: Contrato) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    const maxLineWidth = pageWidth - (2 * margin);
+
+    // Title / Header
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(30, 41, 59); // Slate 800
+    doc.text(cont.title.toUpperCase(), pageWidth / 2, 25, { align: 'center' });
+
+    // Accent line
+    doc.setDrawColor(79, 70, 229); // Indigo 600
+    doc.setLineWidth(1);
+    doc.line(margin, 32, pageWidth - margin, 32);
+
+    // Content
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85); // Slate 700
+    
+    const formattedContent = cont.content || '';
+    const splitLines = doc.splitTextToSize(formattedContent, maxLineWidth);
+    
+    let cursorY = 42;
+    const lineHeight = 6;
+
+    splitLines.forEach((line: string) => {
+      if (cursorY + lineHeight > pageHeight - 30) {
+        doc.addPage();
+        cursorY = 25;
+      }
+      doc.text(line, margin, cursorY);
+      cursorY += lineHeight;
+    });
+
+    // Check if we need a new page for signatures
+    if (cursorY + 45 > pageHeight - 20) {
+      doc.addPage();
+      cursorY = 25;
+    } else {
+      cursorY += 15;
+    }
+
+    // Signatures section
+    doc.setDrawColor(203, 213, 225); // Slate 300
+    doc.setLineWidth(0.5);
+    
+    const sigLineY = cursorY + 15;
+    doc.line(margin, sigLineY, margin + 70, sigLineY);
+    doc.line(pageWidth - margin - 70, sigLineY, pageWidth - margin, sigLineY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(companyInfo.companyName || 'CONTRATADA', margin, sigLineY + 5);
+    doc.text(cont.clientName || 'CONTRATANTE', pageWidth - margin - 70, sigLineY + 5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(`CNPJ: ${companyInfo.cnpj || 'Não informado'}`, margin, sigLineY + 10);
+    doc.text('CONTRATANTE', pageWidth - margin - 70, sigLineY + 10);
+
+    // Save
+    doc.save(`contrato-${cont.title.toLowerCase().replace(/\s+/g, '-')}-${cont.id}.pdf`);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,24 +130,48 @@ export default function ContratosView({
 
     const payload: Omit<Contrato, 'id'> = {
       clientId,
-      clientName: client.companyName,
+      clientName: client.companyName || client.name,
       title,
       value,
       status,
       date,
       content,
-      fileName: fileName || 'contrato_padrao_firmado.pdf'
+      fileName: fileName || 'contrato_padrao_firmado.pdf',
+      contractType,
+      paymentDueDate: contractType === 'Fixo' ? paymentDueDate : '',
+      paymentDueDay: contractType === 'Recorrente' ? paymentDueDay : undefined,
+      paymentTerms,
+      hasFine,
+      fineType,
+      fineValue
     };
 
     try {
-      await onAddContrato(payload);
+      if (editingCont) {
+        await onUpdateContrato(editingCont.id, payload);
+        if ((window as any)._exportOnSave) {
+          handleExportPDF({
+            id: editingCont.id,
+            ...payload
+          });
+        }
+      } else {
+        const newId = await onAddContrato(payload);
+        
+        if ((window as any)._exportOnSave) {
+          handleExportPDF({
+            id: newId,
+            ...payload
+          });
+        }
+      }
+
       setIsOpen(false);
       resetForm();
     } catch (err) {
       console.error(err);
     }
   };
-
   const generateTemplate = () => {
     const client = clientes.find((c) => c.id === clientId);
     if (!client) {
@@ -92,6 +195,22 @@ export default function ContratosView({
     };
 
     const valorExtenso = formatBRL(Number(value) || 0);
+
+    let pagamentoClausulaText = '';
+    if (contractType === 'Recorrente') {
+      pagamentoClausulaText = `4.1. Pelos serviços objeto deste instrumento, a CONTRATANTE pagará à CONTRATADA o valor recorrente de ${valorExtenso} (${paymentTerms || 'Mensal'}), com vencimento todo dia ${paymentDueDay || 15} de cada mês.`;
+    } else {
+      pagamentoClausulaText = `4.1. Pelos serviços objeto deste instrumento, a CONTRATANTE pagará à CONTRATADA o valor fixo de ${valorExtenso} (${paymentTerms || 'A vista'}), com vencimento em ${formatDateLong(paymentDueDate)}.`;
+    }
+
+    let clauseIndex = 2;
+    let multaClausulaText = '';
+    if (hasFine) {
+      multaClausulaText = `\n4.${clauseIndex}. Em caso de atraso injustificado nos pagamentos, incidirá multa moratória de ${fineValue}% sobre o valor em atraso, calculada ao ${fineType === 'Dia' ? 'dia' : 'mês'}.`;
+      clauseIndex++;
+    }
+
+    const suspensaoClausulaText = `4.${clauseIndex}. O inadimplemento de qualquer parcela por período superior a 15 (quinze) dias confere à CONTRATADA o direito de suspender imediatamente a prestação de todos os serviços até a regularização do débito.`;
 
     const template = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS PROFISSIONAIS
 
@@ -118,9 +237,8 @@ CLÁUSULA TERCEIRA – DAS OBRIGAÇÕES DA CONTRATANTE
 3.3. Responder com celeridade às solicitações de aprovação e validação das etapas apresentadas.
 
 CLÁUSULA QUARTA – DO VALOR E CONDIÇÕES DE PAGAMENTO
-4.1. Pelos serviços objeto deste instrumento, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorExtenso} (${Number(value) ? 'pago conforme condições comerciais pactuadas' : 'valor sob consulta'}).
-4.2. Em caso de atraso injustificado nos pagamentos, incidirá multa moratória de 2% (dois por cento) sobre o valor em atraso, acrescido de juros de mora de 1% (um por cento) ao mês, pro rata die.
-4.3. O inadimplemento de qualquer parcela por período superior a 15 (quinze) dias confere à CONTRATADA o direito de suspender imediatamente a prestação de todos os serviços até a regularização do débito.
+${pagamentoClausulaText}${multaClausulaText}
+${suspensaoClausulaText}
 
 CLÁUSULA QUINTA – DA CONFIDENCIALIDADE E LGPD
 5.1. Ambas as partes comprometem-se a proteger e tratar como confidenciais quaisquer segredos de negócios, informações técnicas, estratégicas ou de clientes trocadas durante este contrato.
@@ -139,7 +257,7 @@ CLÁUSULA OITAVA – DO FORO
 
 E, por estarem assim justas e contratadas, as partes firmam o presente instrumento em 02 (duas) vias de igual teor e forma para um só efeito legal.
 
-Local e Data: _____________, ${formatDateLong(date)}
+Local e Data: Brasília - DF, ${formatDateLong(date || new Date().toISOString().split('T')[0])}
 `;
     setContent(template);
   };
@@ -204,13 +322,40 @@ Local e Data: _____________, ${formatDateLong(date)}
   };
 
   const resetForm = () => {
+    setEditingCont(null);
     setClientId('');
     setTitle('');
     setValue(0);
     setStatus('Pendente');
-    setDate('');
+    setDate(new Date().toISOString().split('T')[0]);
     setFileName('');
     setContent('');
+    setContractType('Fixo');
+    setPaymentDueDate('');
+    setPaymentDueDay(15);
+    setPaymentTerms('A vista');
+    setHasFine(false);
+    setFineType('Dia');
+    setFineValue(0);
+  };
+
+  const handleOpenEdit = (cont: Contrato) => {
+    setEditingCont(cont);
+    setClientId(cont.clientId);
+    setTitle(cont.title);
+    setValue(cont.value || 0);
+    setStatus(cont.status || 'Pendente');
+    setDate(cont.date || new Date().toISOString().split('T')[0]);
+    setFileName(cont.fileName || '');
+    setContent(cont.content || '');
+    setContractType(cont.contractType || 'Fixo');
+    setPaymentDueDate(cont.paymentDueDate || '');
+    setPaymentDueDay(cont.paymentDueDay || 15);
+    setPaymentTerms(cont.paymentTerms || 'A vista');
+    setHasFine(cont.hasFine || false);
+    setFineType(cont.fineType || 'Dia');
+    setFineValue(cont.fineValue || 0);
+    setIsOpen(true);
   };
 
   const handleToggleStatus = async (cont: Contrato) => {
@@ -276,6 +421,20 @@ Local e Data: _____________, ${formatDateLong(date)}
 
                   <div className="flex gap-1">
                     <button
+                      onClick={() => handleOpenEdit(cont)}
+                      className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-500 transition-colors cursor-pointer"
+                      title="Editar Contrato"
+                    >
+                      <Edit2 size={13} />
+                    </button>
+                    <button
+                      onClick={() => handleExportPDF(cont)}
+                      className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-500 transition-colors cursor-pointer"
+                      title="Exportar em PDF"
+                    >
+                      <FileDown size={13} />
+                    </button>
+                    <button
                       onClick={() => handlePrint(cont)}
                       className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-500 transition-colors cursor-pointer"
                       title="Imprimir / PDF"
@@ -314,6 +473,36 @@ Local e Data: _____________, ${formatDateLong(date)}
                     <DollarSign size={13} className="text-indigo-500" />
                     <span className="font-bold text-slate-800 dark:text-slate-300 font-mono">Valor Contratual: {formatBRL(cont.value)}</span>
                   </div>
+
+                  {/* Payment Details */}
+                  {(cont.contractType || cont.paymentDueDate || cont.paymentTerms) && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60 space-y-1 text-[11px] text-slate-500">
+                      <div className="flex justify-between">
+                        <span className="font-semibold text-slate-400">Tipo de Cliente:</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{cont.contractType || 'Fixo'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-semibold text-slate-400">Vencimento:</span>
+                        <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                          {cont.contractType === 'Recorrente'
+                            ? `Todo dia ${cont.paymentDueDay || 15}`
+                            : cont.paymentDueDate
+                            ? cont.paymentDueDate.split('-').reverse().join('/')
+                            : 'Não definido'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-semibold text-slate-400">Forma Pagto:</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{cont.paymentTerms || 'A vista'}</span>
+                      </div>
+                      {cont.hasFine && (
+                        <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                          <span className="font-semibold">Multa:</span>
+                          <span className="font-bold">{cont.fineValue}% ao {cont.fineType === 'Dia' ? 'dia' : 'mês'}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -379,9 +568,9 @@ Local e Data: _____________, ${formatDateLong(date)}
                     className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:outline-none font-bold text-xs"
                   >
                     <option value="">Selecione o cliente ativo...</option>
-                    {clientes.map((c) => (
+                    {clientes.filter((c) => c.status === 'Ativo').map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.companyName} ({c.name})
+                        {c.companyName || c.name} ({c.name})
                       </option>
                     ))}
                   </select>
@@ -420,6 +609,110 @@ Local e Data: _____________, ${formatDateLong(date)}
                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none text-xs"
                     />
                   </div>
+                </div>
+
+                {/* Billing Conditions & Fine configuration panel */}
+                <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/80 p-3.5 rounded-xl space-y-3">
+                  <h4 className="font-bold text-[10px] text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                    Condições de Faturamento e Cobrança
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold text-slate-500 mb-1">Tipo de Cliente *</label>
+                      <select
+                        value={contractType}
+                        onChange={(e) => setContractType(e.target.value as any)}
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none text-xs font-bold"
+                      >
+                        <option value="Fixo">Fixo</option>
+                        <option value="Recorrente">Recorrente</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold text-slate-500 mb-1">Forma de Pagamento *</label>
+                      <select
+                        value={paymentTerms}
+                        onChange={(e) => setPaymentTerms(e.target.value as any)}
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none text-xs font-bold"
+                      >
+                        <option value="A vista">A vista</option>
+                        <option value="50/50">50/50</option>
+                        <option value="Mensal">Mensal</option>
+                        <option value="Personalizado">Personalizado</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {contractType === 'Recorrente' ? (
+                      <div>
+                        <label className="block text-[9px] uppercase font-bold text-slate-500 mb-1">Dia do Vencimento (Mensal) *</label>
+                        <select
+                          value={paymentDueDay}
+                          onChange={(e) => setPaymentDueDay(Number(e.target.value))}
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none text-xs font-bold"
+                        >
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                            <option key={d} value={d}>
+                              Todo dia {d} de cada mês
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-[9px] uppercase font-bold text-slate-500 mb-1">Data de Vencimento do Pagamento *</label>
+                        <input
+                          type="date"
+                          required
+                          value={paymentDueDate}
+                          onChange={(e) => setPaymentDueDate(e.target.value)}
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-[10px] font-bold text-slate-600 dark:text-slate-400">
+                      <input
+                        type="checkbox"
+                        checked={hasFine}
+                        onChange={(e) => setHasFine(e.target.checked)}
+                        className="rounded border-slate-300 dark:border-slate-800 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>Aplicar Multa em Caso de Atraso?</span>
+                    </label>
+                  </div>
+
+                  {hasFine && (
+                    <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200/50 dark:border-slate-800/50">
+                      <div>
+                        <label className="block text-[9px] uppercase font-bold text-slate-500 mb-1">Frequência da Multa</label>
+                        <select
+                          value={fineType}
+                          onChange={(e) => setFineType(e.target.value as any)}
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none text-xs font-bold"
+                        >
+                          <option value="Dia">Ao Dia</option>
+                          <option value="Mes">Ao Mês</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase font-bold text-slate-500 mb-1">Valor da Multa (%)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={fineValue}
+                          onChange={(e) => setFineValue(Number(e.target.value))}
+                          placeholder="Ex: 1"
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 focus:outline-none text-xs font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-2">
@@ -464,17 +757,27 @@ Local e Data: _____________, ${formatDateLong(date)}
                   </select>
                 </div>
 
-                <div className="pt-4 flex gap-3">
-                  <button
-                    type="submit"
-                    className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-all shadow-md shadow-indigo-500/10 cursor-pointer"
-                  >
-                    Registrar Contrato
-                  </button>
+                <div className="pt-4 flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      onClick={() => { (window as any)._exportOnSave = false; }}
+                      className="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-all shadow-md shadow-indigo-500/10 cursor-pointer text-xs"
+                    >
+                      {editingCont ? 'Salvar Alterações' : 'Registrar'}
+                    </button>
+                    <button
+                      type="submit"
+                      onClick={() => { (window as any)._exportOnSave = true; }}
+                      className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-all shadow-md shadow-emerald-500/10 cursor-pointer text-xs flex items-center justify-center gap-1"
+                    >
+                      <FileDown size={14} /> {editingCont ? 'Salvar & Exportar PDF' : 'Registrar & PDF'}
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setIsOpen(false)}
-                    className="py-2.5 px-4 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-lg transition-all cursor-pointer"
+                    className="w-full py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-lg transition-all cursor-pointer text-xs"
                   >
                     Cancelar
                   </button>

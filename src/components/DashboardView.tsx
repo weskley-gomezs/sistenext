@@ -19,7 +19,7 @@ import {
   Video
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Lead, Cliente, Projeto, Proposta, Financeiro, EventAgenda, FollowUp, MembroEquipe } from '../types';
+import { Lead, Cliente, Projeto, Proposta, Financeiro, EventAgenda, FollowUp, MembroEquipe, Contrato } from '../types';
 import { NotificationService } from '../utils/notificationService';
 
 interface DashboardViewProps {
@@ -30,6 +30,7 @@ interface DashboardViewProps {
   financeiro: Financeiro[];
   agenda: EventAgenda[];
   followUps: FollowUp[];
+  contratos?: Contrato[];
   config?: any;
   membros?: MembroEquipe[];
   userEmail?: string;
@@ -44,6 +45,7 @@ export default function DashboardView({
   financeiro,
   agenda,
   followUps,
+  contratos = [],
   config,
   membros = [],
   userEmail,
@@ -260,6 +262,158 @@ export default function DashboardView({
           </button>
         </motion.div>
       )}
+
+      {/* Alertas de Vencimento de Contratos */}
+      {(() => {
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
+        
+        const getContractDueDetails = (cont: Contrato) => {
+          if (cont.contractType === 'Recorrente') {
+            const dueDay = cont.paymentDueDay || 15;
+            const todayClean = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            
+            // Try current month
+            let candidate = new Date(today.getFullYear(), today.getMonth(), dueDay);
+            let diffTime = candidate.getTime() - todayClean.getTime();
+            let diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+            
+            // If past by more than 10 days, target next month
+            if (diffDays < -10) {
+              candidate = new Date(today.getFullYear(), today.getMonth() + 1, dueDay);
+              diffTime = candidate.getTime() - todayClean.getTime();
+              diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+            }
+            
+            return {
+              dueDateStr: `Todo dia ${dueDay}`,
+              diffDays,
+              isOverdue: diffDays < 0,
+              isDueToday: diffDays === 0
+            };
+          } else {
+            if (!cont.paymentDueDate) return null;
+            const [yr, mo, dy] = cont.paymentDueDate.split('-').map(Number);
+            const dueDate = new Date(yr, mo - 1, dy);
+            const todayClean = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const dueDateClean = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+            
+            const diffTime = dueDateClean.getTime() - todayClean.getTime();
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+            
+            return {
+              dueDateStr: cont.paymentDueDate.split('-').reverse().join('/'),
+              diffDays,
+              isOverdue: diffDays < 0,
+              isDueToday: diffDays === 0
+            };
+          }
+        };
+
+        const upcomingContracts = contratos.map((cont) => {
+          const details = getContractDueDetails(cont);
+          if (!details) return null;
+          return {
+            ...cont,
+            ...details
+          };
+        }).filter((cont): cont is NonNullable<typeof cont> => {
+          if (!cont) return false;
+          
+          // Check if this contract has already been paid in financeiro
+          const isPaid = financeiro.some(f => 
+            (f.clientName?.toLowerCase() === cont.clientName?.toLowerCase()) &&
+            f.type === 'Receber' &&
+            f.status === 'Recebido' &&
+            (cont.contractType === 'Recorrente' 
+              ? f.date.includes(`${currentYear}-${currentMonth}`) 
+              : true)
+          );
+
+          if (isPaid) return false;
+
+          // Exibir se estiver atrasado (até 15 dias de atraso) ou se for vencer nos próximos 5 dias
+          return cont.diffDays <= 5 && cont.diffDays >= -15;
+        });
+
+        if (upcomingContracts.length === 0) return null;
+
+        return (
+          <motion.div
+            variants={itemVariants}
+            className="border border-red-200 dark:border-red-900/60 bg-red-500/5 dark:bg-red-500/10 rounded-2xl p-5 shadow-sm space-y-4"
+          >
+            <div className="flex justify-between items-center pb-3 border-b border-red-200/50 dark:border-red-900/40">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-red-500 text-white rounded-xl flex items-center justify-center animate-pulse">
+                  <BadgeDollarSign size={18} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-extrabold text-red-700 dark:text-red-400 uppercase tracking-wider">
+                    Atenção: Vencimentos de Contratos & Faturamento
+                  </h2>
+                  <p className="text-[11px] text-red-600 dark:text-red-400/80">
+                    Sinalização preventiva de parcelas a vencer ou em atraso imediato.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate('documentos')}
+                className="text-xs font-bold text-red-700 dark:text-red-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                Ver Contratos <ChevronRight size={14} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {upcomingContracts.map((cont) => (
+                <div
+                  key={cont.id}
+                  className="bg-white dark:bg-slate-900/50 border border-red-100 dark:border-red-950 p-4 rounded-xl flex items-start justify-between gap-3 shadow-xs"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black uppercase bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400 px-2 py-0.5 rounded">
+                        {cont.contractType === 'Recorrente' ? 'Cliente Recorrente' : 'Cliente Fixo'}
+                      </span>
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate max-w-[150px]">
+                        {cont.clientName}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      {cont.title}
+                    </p>
+                    <div className="flex gap-4 text-[10px] text-slate-500">
+                      <span>Vencimento: <strong className="font-mono text-slate-700 dark:text-slate-300">{cont.dueDateStr}</strong></span>
+                      <span>Forma: <strong>{cont.paymentTerms || 'A vista'}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="text-right space-y-1">
+                    <span className="block text-xs font-black text-slate-800 dark:text-slate-200 font-mono">
+                      {formatBRL(cont.value || 0)}
+                    </span>
+                    <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      cont.isOverdue
+                        ? 'bg-red-500 text-white'
+                        : cont.isDueToday
+                        ? 'bg-amber-500 text-white animate-pulse'
+                        : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                    }`}>
+                      {cont.isOverdue
+                        ? `Atrasado há ${Math.abs(cont.diffDays)} dias`
+                        : cont.isDueToday
+                        ? 'Vence HOJE!'
+                        : `Vence em ${cont.diffDays} dias`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        );
+      })()}
 
       {/* Alertas e Lembretes da Agenda */}
       <motion.div

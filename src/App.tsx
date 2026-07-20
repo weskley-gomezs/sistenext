@@ -592,6 +592,9 @@ export default function App() {
               cnpj: associatedLead.cnpj,
               address: associatedLead.address,
               status: 'Ativo',
+              contractValue: proposal.value,
+              contractType: proposal.contractType,
+              paymentTerms: proposal.paymentTerms,
               createdAt: new Date().toISOString().split('T')[0]
             };
             try {
@@ -606,64 +609,50 @@ export default function App() {
         }
 
         try {
-          const contractPayload: Omit<Contrato, 'id'> = {
-            ownerId: user.ownerId,
-            clientId: linkedClientId,
-            clientName: finalClientName,
-            title: `Contrato Ref: ${proposal.number}`,
-            value: proposal.value,
-            status: 'Pendente',
-            date: new Date().toISOString().split('T')[0],
-            content: `CONTRATO DE PRESTAÇÃO DE SERVIÇOS\n\nCONTRATANTE: ${finalClientName}\nCONTRATADO: SisteNext\n\nOBJETO DO CONTRATO:\nPrestação de serviços descritos na proposta comercial ${proposal.number}:\n${proposal.services.map((s) => `- ${s.name}: R$ ${s.price.toFixed(2)}`).join('\n')}\n\nVALOR E CONDIÇÕES:\nO valor total deste contrato é de R$ ${proposal.value.toFixed(2)}, conforme proposta comercial vinculada.`
-          };
-          await addItem<Contrato>('contratos', contractPayload, user.ownerId);
-        } catch (err) {
-          console.error('Error auto-creating contract in proposal cascade:', err);
-        }
+          if (proposal.paymentTerms === '50/50') {
+            // Create two finance entries
+            const financeiroPayload1: Omit<Financeiro, 'id'> = {
+              ownerId: user.ownerId,
+              description: `Faturamento Proposta ${proposal.number} (Parcela 1/2 - 50%)`,
+              type: 'Receber',
+              category: 'Venda',
+              value: proposal.value / 2,
+              status: 'Pendente',
+              date: new Date().toISOString().split('T')[0],
+              clientName: finalClientName,
+              projectName: `Projeto - ${proposal.description || 'Prestação de Serviços'}`,
+              paymentMethod: 'Pix'
+            };
+            await addItem<Financeiro>('financeiro', financeiroPayload1, user.ownerId);
 
-        try {
-          const projectPayload: Omit<Projeto, 'id'> = {
-            ownerId: user.ownerId,
-            clientId: linkedClientId,
-            clientName: finalClientName,
-            name: `Projeto - ${proposal.description || 'Prestação de Serviços'}`,
-            description: `Projeto gerado automaticamente a partir da proposta ${proposal.number}.`,
-            scope: proposal.services.map((s) => `- ${s.name}`).join('\n'),
-            value: proposal.value,
-            status: 'Levantamento',
-            startDate: new Date().toISOString().split('T')[0],
-            deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            estimatedDelivery: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            owner: 'Arquiteto Sênior',
-            checklist: [
-              { id: '1', task: 'Kick-off com o cliente', done: false },
-              { id: '2', task: 'Levantamento de requisitos detalhado', done: false },
-              { id: '3', task: 'Desenho de protótipo inicial', done: false },
-              { id: '4', task: 'Aprovação do layout', done: false },
-              { id: '5', task: 'Homologação e Testes', done: false },
-              { id: '6', task: 'Entrega e Treinamento', done: false }
-            ],
-            files: []
-          };
-          await addItem<Projeto>('projetos', projectPayload, user.ownerId);
-        } catch (err) {
-          console.error('Error auto-creating project in proposal cascade:', err);
-        }
-
-        try {
-          const financeiroPayload: Omit<Financeiro, 'id'> = {
-            ownerId: user.ownerId,
-            description: `Faturamento Proposta ${proposal.number}`,
-            type: 'Receber',
-            category: 'Venda',
-            value: proposal.value,
-            status: 'Pendente',
-            date: new Date().toISOString().split('T')[0],
-            clientName: finalClientName,
-            projectName: `Projeto - ${proposal.description || 'Prestação de Serviços'}`,
-            paymentMethod: 'Pix'
-          };
-          await addItem<Financeiro>('financeiro', financeiroPayload, user.ownerId);
+            const financeiroPayload2: Omit<Financeiro, 'id'> = {
+              ownerId: user.ownerId,
+              description: `Faturamento Proposta ${proposal.number} (Parcela 2/2 - 50%)`,
+              type: 'Receber',
+              category: 'Venda',
+              value: proposal.value / 2,
+              status: 'Pendente',
+              date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days later
+              clientName: finalClientName,
+              projectName: `Projeto - ${proposal.description || 'Prestação de Serviços'}`,
+              paymentMethod: 'Pix'
+            };
+            await addItem<Financeiro>('financeiro', financeiroPayload2, user.ownerId);
+          } else {
+            const financeiroPayload: Omit<Financeiro, 'id'> = {
+              ownerId: user.ownerId,
+              description: `Faturamento Proposta ${proposal.number}`,
+              type: 'Receber',
+              category: 'Venda',
+              value: proposal.value,
+              status: 'Pendente',
+              date: new Date().toISOString().split('T')[0],
+              clientName: finalClientName,
+              projectName: `Projeto - ${proposal.description || 'Prestação de Serviços'}`,
+              paymentMethod: 'Pix'
+            };
+            await addItem<Financeiro>('financeiro', financeiroPayload, user.ownerId);
+          }
         } catch (err) {
           console.error('Error auto-creating finance entry in proposal cascade:', err);
         }
@@ -730,6 +719,7 @@ export default function App() {
             financeiro={filteredFinanceiro}
             agenda={filteredAgenda}
             followUps={filteredFollowUps}
+            contratos={filteredContratos}
             config={config}
             membros={membros}
             userEmail={user?.email}
@@ -875,13 +865,33 @@ export default function App() {
           <ContratosView
             contratos={filteredContratos}
             clientes={filteredClientes}
-            onAddContrato={(payload) => {
+            onAddContrato={async (payload) => {
               if (!user?.ownerId) return Promise.reject('No ownerId');
-              return addItem('contratos', { ...payload, ownerId: user.ownerId }, user.ownerId);
+              const newId = await addItem('contratos', { ...payload, ownerId: user.ownerId }, user.ownerId);
+              if (payload.clientId) {
+                const clientUpdates: Partial<Cliente> = {
+                  contractValue: payload.value,
+                  contractType: payload.contractType,
+                  paymentTerms: payload.paymentTerms
+                };
+                await updateItem('clientes', payload.clientId, clientUpdates, user.ownerId);
+              }
+              return newId;
             }}
-            onUpdateContrato={(id, payload) => {
+            onUpdateContrato={async (id, payload) => {
               if (!user?.ownerId) return Promise.resolve();
-              return updateItem('contratos', id, payload, user.ownerId);
+              await updateItem('contratos', id, payload, user.ownerId);
+              const contract = contratos.find(c => c.id === id);
+              const targetClientId = payload.clientId || contract?.clientId;
+              if (targetClientId) {
+                const clientUpdates: Partial<Cliente> = {};
+                if (payload.value !== undefined) clientUpdates.contractValue = payload.value;
+                if (payload.contractType !== undefined) clientUpdates.contractType = payload.contractType;
+                if (payload.paymentTerms !== undefined) clientUpdates.paymentTerms = payload.paymentTerms;
+                if (Object.keys(clientUpdates).length > 0) {
+                  await updateItem('clientes', targetClientId, clientUpdates, user.ownerId);
+                }
+              }
             }}
             onDeleteContrato={(id, justification, data) => {
               if (!user?.ownerId) return Promise.resolve();

@@ -177,6 +177,7 @@ export default function ClientesView({
   const clientProjects = projetos.filter(p => p.clientId === selectedClient?.id);
   const clientFinance = financeiro.filter(f => f.clientName === selectedClient?.companyName);
   const clientContracts = contratos.filter(c => c.clientId === selectedClient?.id);
+  const activeContract = clientContracts.find(c => c.status === 'Assinado') || clientContracts[0];
   const clientNotes = anotacoes.filter(n => n.entityId === selectedClient?.id);
   const clientProposals = propostas.filter(p => p.clientName === selectedClient?.companyName || p.id === selectedClient?.leadId);
   const clientDocs = documentos.filter(d => d.entityId === selectedClient?.id || d.entityId === selectedClient?.leadId);
@@ -390,6 +391,19 @@ export default function ClientesView({
                           <option value="Recorrente">Recorrente</option>
                         </select>
                       </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase">Condições de Pagamento</label>
+                        <select 
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 rounded-lg text-xs font-bold"
+                          value={editFormData.paymentTerms || 'A vista'}
+                          onChange={e => setEditFormData({...editFormData, paymentTerms: e.target.value as any})}
+                        >
+                          <option value="A vista">À Vista (100%)</option>
+                          <option value="50/50">50% Início / 50% Entrega</option>
+                          <option value="Mensal">Mensal (Recorrência)</option>
+                          <option value="Personalizado">Personalizado</option>
+                        </select>
+                      </div>
                       <div className="space-y-1 flex flex-col justify-center">
                         <label className="text-[10px] font-black text-slate-400 uppercase mb-1">Possui Manutenção?</label>
                         <div className="flex items-center gap-4">
@@ -525,11 +539,33 @@ export default function ClientesView({
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
                             <span className="text-[9px] text-slate-400 uppercase">Valor Contrato</span>
-                            <span className="text-xs font-black font-mono">{formatBRL(selectedClient.contractValue || 0)}</span>
+                            <span className="text-xs font-black font-mono">
+                              {formatBRL(activeContract ? (activeContract.value || 0) : (selectedClient.contractValue || 0))}
+                            </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="text-[9px] text-slate-400 uppercase">Tipo</span>
-                            <span className="text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">{selectedClient.contractType || 'Fixo'}</span>
+                            <span className="text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
+                              {activeContract ? (activeContract.contractType || 'Fixo') : (selectedClient.contractType || 'Fixo')}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[9px] text-slate-400 uppercase">Pagamento</span>
+                            <span className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-lg">
+                              {activeContract ? (activeContract.paymentTerms || 'A vista') : (selectedClient.paymentTerms || 'A vista')}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[9px] text-slate-400 uppercase">Vencimento</span>
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono">
+                              {activeContract 
+                                ? (activeContract.contractType === 'Recorrente'
+                                  ? `Todo dia ${activeContract.paymentDueDay || 15}`
+                                  : activeContract.paymentDueDate
+                                  ? activeContract.paymentDueDate.split('-').reverse().join('/')
+                                  : 'Não definido')
+                                : 'Não definido'}
+                            </span>
                           </div>
                           <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                             <div className="flex items-center gap-2 mb-2">
