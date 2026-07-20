@@ -128,7 +128,17 @@ service cloud.firestore {
     }
 
     match /anotacoes/{id} {
-      allow get: if isAuthenticated() && (resource == null || isAuthorized(resource.data.ownerId));
+      allow get: if isAuthenticated() && (
+        resource == null || (
+          isAuthorized(resource.data.ownerId) && (
+            // Admin sees everything, Salesperson sees only theirs or linked to their leads
+            !exists(/databases/$(database)/documents/user_profiles/$(request.auth.uid)) ||
+            get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data.role != 'Vendedor' ||
+            resource.data.createdBy == request.auth.token.email ||
+            resource.data.user == request.auth.token.email
+          )
+        )
+      );
       allow list: if isAuthenticated();
       allow write: if isAuthenticated() && (
         (resource == null || isAuthorized(resource.data.ownerId)) &&
