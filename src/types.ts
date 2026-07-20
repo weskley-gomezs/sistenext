@@ -273,6 +273,7 @@ export interface Anotacao {
   entityName?: string;
   entityType?: 'client' | 'lead' | 'project';
   createdAt: string;
+  scheduledDate?: string;
   user: string;
   deletionJustification?: string;
 }

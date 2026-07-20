@@ -24,7 +24,9 @@ import {
   ClipboardList,
   Highlighter,
   FileImage,
-  MousePointer
+  MousePointer,
+  CalendarDays,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anotacao } from '../types';
@@ -52,6 +54,11 @@ export default function AnotacoesView({
 
   // Form Fields
   const [title, setTitle] = useState('');
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [showOnlyScheduled, setShowOnlyScheduled] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'calendar'>('grid');
+  const [calendarDate, setCalendarDate] = useState(new Date());
   
   // Interactive tools
   const [drawingTool, setDrawingTool] = useState<'cursor' | 'pencil' | 'highlighter' | 'eraser'>('cursor');
@@ -254,8 +261,23 @@ export default function AnotacoesView({
 
   // Insert interactive checkbox
   const insertCheckbox = () => {
-    const html = `<div class="flex items-start gap-2 my-1.5"><input type="checkbox" class="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 mt-0.5 cursor-pointer" />&nbsp;<span>Tarefa</span></div>`;
-    triggerFormat('insertHTML', html);
+    if (editorRef.current) {
+      editorRef.current.focus();
+      
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      
+      const range = selection.getRangeAt(0);
+      const selectedText = range.toString();
+      
+      // Se houver texto selecionado, vamos envolvê-lo. Se não, apenas inserimos o padrão.
+      const content = selectedText || 'Tarefa';
+      
+      // Usamos um parágrafo com display flex para o checklist, o que isola melhor a linha
+      const html = `<p class="flex items-center gap-2 my-1" style="display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0;"><input type="checkbox" class="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer" style="margin: 0;" />&nbsp;<span>${content}</span></p><p>&nbsp;</p>`;
+      
+      document.execCommand('insertHTML', false, html);
+    }
   };
 
   // File Upload to base64
@@ -267,7 +289,7 @@ export default function AnotacoesView({
       const base64 = event.target?.result as string;
       if (editorRef.current) {
         editorRef.current.focus();
-        const imgHtml = `<div class="my-3 block"><img src="${base64}" class="max-w-full max-h-[220px] rounded-2xl object-contain shadow-xs hover:shadow-md transition-shadow" referrerPolicy="no-referrer" /></div><p>&nbsp;</p>`;
+        const imgHtml = `<div class="my-4 flex justify-center w-full"><img src="${base64}" class="max-w-[85%] max-h-[300px] rounded-2xl object-contain shadow-md border border-slate-100 dark:border-slate-800 transition-all hover:scale-[1.01]" referrerPolicy="no-referrer" /></div><p>&nbsp;</p>`;
         document.execCommand('insertHTML', false, imgHtml);
       }
     };
@@ -284,7 +306,7 @@ export default function AnotacoesView({
         const base64 = event.target?.result as string;
         if (editorRef.current) {
           editorRef.current.focus();
-          const imgHtml = `<div class="my-3 block"><img src="${base64}" class="max-w-full max-h-[220px] rounded-2xl object-contain shadow-xs hover:shadow-md transition-shadow" referrerPolicy="no-referrer" /></div><p>&nbsp;</p>`;
+          const imgHtml = `<div class="my-4 flex justify-center w-full"><img src="${base64}" class="max-w-[85%] max-h-[300px] rounded-2xl object-contain shadow-md border border-slate-100 dark:border-slate-800 transition-all hover:scale-[1.01]" referrerPolicy="no-referrer" /></div><p>&nbsp;</p>`;
           document.execCommand('insertHTML', false, imgHtml);
         }
       };
@@ -312,7 +334,7 @@ export default function AnotacoesView({
         const base64 = event.target?.result as string;
         if (editorRef.current) {
           editorRef.current.focus();
-          const imgHtml = `<div class="my-3 block"><img src="${base64}" class="max-w-full max-h-[220px] rounded-2xl object-contain shadow-xs hover:shadow-md transition-shadow" referrerPolicy="no-referrer" /></div><p>&nbsp;</p>`;
+          const imgHtml = `<div class="my-4 flex justify-center w-full"><img src="${base64}" class="max-w-[85%] max-h-[300px] rounded-2xl object-contain shadow-md border border-slate-100 dark:border-slate-800 transition-all hover:scale-[1.01]" referrerPolicy="no-referrer" /></div><p>&nbsp;</p>`;
           document.execCommand('insertHTML', false, imgHtml);
         }
       };
@@ -333,12 +355,73 @@ export default function AnotacoesView({
     }
   };
 
+  // Forçar o separador de parágrafos padrão a ser <p>
+  useEffect(() => {
+    if (isOpen) {
+      try {
+        document.execCommand('defaultParagraphSeparator', false, 'p');
+      } catch (e) {
+        console.warn('Could not set defaultParagraphSeparator:', e);
+      }
+    }
+  }, [isOpen]);
+
+  // Sincronizar tamanho do Canvas com o tamanho de conteúdo real do editor de texto
+  useEffect(() => {
+    if (!isOpen || !editorRef.current || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const editor = editorRef.current;
+
+    const handleResize = () => {
+      const rect = editor.getBoundingClientRect();
+      const width = rect.width;
+      const height = Math.max(editor.scrollHeight, 440);
+
+      if (canvas.width !== width || canvas.height !== height) {
+        // Backup do conteúdo atual do canvas
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        if (tempCtx && canvas.width > 0 && canvas.height > 0) {
+          tempCtx.drawImage(canvas, 0, 0);
+        }
+
+        // Redimensionar resolução física do Canvas
+        canvas.width = width;
+        canvas.height = height;
+
+        // Restaurar o conteúdo
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(tempCanvas, 0, 0);
+        }
+      }
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+
+    resizeObserver.observe(editor);
+
+    // Redimensionamento inicial rápido
+    setTimeout(handleResize, 50);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [isOpen]);
+
   // Load editor content on open
   useEffect(() => {
     if (isOpen) {
       if (editingAnotacao) {
         setTitle(editingAnotacao.title);
         setHasDrawing(!!editingAnotacao.hasDrawing);
+        setScheduledDate(editingAnotacao.scheduledDate || '');
+        setIsScheduled(!!editingAnotacao.scheduledDate);
         setDrawingTool('cursor');
         
         setTimeout(() => {
@@ -346,22 +429,25 @@ export default function AnotacoesView({
             editorRef.current.innerHTML = editingAnotacao.content || '';
           }
           
-          const canvas = canvasRef.current;
-          if (canvas && editingAnotacao.drawingData) {
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              const img = new Image();
-              img.onload = () => {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0);
-                
-                setHistory([canvas.toDataURL()]);
-                setHistoryIndex(0);
-              };
-              img.src = editingAnotacao.drawingData;
+          // Carregar os rabiscos somente após o editor ser renderizado e o canvas ter o tamanho inicial correto
+          setTimeout(() => {
+            const canvas = canvasRef.current;
+            if (canvas && editingAnotacao.drawingData) {
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                const img = new Image();
+                img.onload = () => {
+                  ctx.clearRect(0, 0, canvas.width, canvas.height);
+                  ctx.drawImage(img, 0, 0);
+                  
+                  setHistory([canvas.toDataURL()]);
+                  setHistoryIndex(0);
+                };
+                img.src = editingAnotacao.drawingData;
+              }
             }
-          }
-        }, 150);
+          }, 120);
+        }, 50);
       } else {
         setTitle('');
         setHasDrawing(false);
@@ -372,7 +458,7 @@ export default function AnotacoesView({
           if (editorRef.current) {
             editorRef.current.innerHTML = '<p>Comece a digitar sua pauta ou nota aqui...</p>';
           }
-        }, 150);
+        }, 50);
       }
     }
   }, [isOpen, editingAnotacao]);
@@ -394,7 +480,8 @@ export default function AnotacoesView({
             title,
             content: finalContent,
             hasDrawing,
-            drawingData: finalDrawingData
+            drawingData: finalDrawingData,
+            scheduledDate: isScheduled ? scheduledDate : undefined
           });
           setIsOpen(false);
           resetForm();
@@ -408,6 +495,7 @@ export default function AnotacoesView({
         content: finalContent,
         hasDrawing,
         drawingData: finalDrawingData,
+        scheduledDate: isScheduled ? scheduledDate : undefined,
         createdAt: new Date().toISOString().split('T')[0],
         user: currentUser?.name || currentUser?.email || 'Consultor Sênior'
       };
@@ -424,6 +512,8 @@ export default function AnotacoesView({
 
   const resetForm = () => {
     setTitle('');
+    setScheduledDate('');
+    setIsScheduled(false);
     setEditingAnotacao(null);
     setHasDrawing(false);
     setDrawingTool('cursor');
@@ -433,12 +523,48 @@ export default function AnotacoesView({
 
   const filtered = anotacoes.filter((n) => {
     const q = search.toLowerCase();
-    return (
-      n.title.toLowerCase().includes(q) ||
+    const matchesSearch = n.title.toLowerCase().includes(q) ||
       n.content.toLowerCase().includes(q) ||
-      (n.entityName && n.entityName.toLowerCase().includes(q))
-    );
+      (n.entityName && n.entityName.toLowerCase().includes(q));
+    
+    const matchesScheduled = !showOnlyScheduled || !!n.scheduledDate;
+    
+    return matchesSearch && matchesScheduled;
   });
+
+  const generateCalendarDays = () => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+    const daysInMonth = lastDayOfMonth.getDate();
+    const startDay = firstDayOfMonth.getDay(); // 0 is Sunday
+    
+    const days = [];
+    
+    // Add empty slots for days before the first day of the month
+    for (let i = 0; i < startDay; i++) {
+      days.push(null);
+    }
+    
+    // Add actual days
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i));
+    }
+    
+    return days;
+  };
+
+  const calendarDays = generateCalendarDays();
+  const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+  const handlePrevMonth = () => {
+    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto font-sans relative">
@@ -460,9 +586,14 @@ export default function AnotacoesView({
         }
         .notion-editor-sheet ul {
           list-style-type: disc !important;
-          padding-left: 1.25rem !important;
-          margin-top: 0.5rem !important;
-          margin-bottom: 0.5rem !important;
+          padding-left: 1.5rem !important;
+          margin-top: 0.75rem !important;
+          margin-bottom: 0.75rem !important;
+          display: block !important;
+        }
+        .notion-editor-sheet li {
+          margin-bottom: 0.35rem !important;
+          display: list-item !important;
         }
         .notion-editor-sheet blockquote {
           border-left: 3px solid #6366f1 !important;
@@ -471,6 +602,19 @@ export default function AnotacoesView({
           background-color: rgba(99, 102, 241, 0.04) !important;
           margin: 0.75rem 0 !important;
           border-radius: 0 0.5rem 0.5rem 0;
+        }
+        .notion-editor-sheet p, .notion-editor-sheet div {
+          margin-top: 0.4rem !important;
+          margin-bottom: 0.4rem !important;
+          line-height: 1.6 !important;
+          min-height: 1.2em;
+          display: block;
+        }
+        .notion-editor-sheet:empty::before {
+          content: attr(placeholder);
+          color: #94a3b8;
+          pointer-events: none;
+          display: block;
         }
       `}} />
 
@@ -495,118 +639,272 @@ export default function AnotacoesView({
         </button>
       </div>
 
-      {/* Search Input */}
-      <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl shadow-sm">
-        <Search className="absolute left-3.5 top-3.5 text-slate-400" size={16} />
-        <input
-          type="text"
-          placeholder="Pesquisar notas por título, conteúdo ou cliente..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-transparent border-0 rounded-2xl py-3 pl-11 pr-4 text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
-        />
+      {/* Filters and Search Toolbar */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl">
+          <button
+            onClick={() => setShowOnlyScheduled(false)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+              !showOnlyScheduled 
+                ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+          >
+            Todas as Notas
+          </button>
+          <button
+            onClick={() => {
+              setShowOnlyScheduled(true);
+              setViewMode('calendar');
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+              showOnlyScheduled && viewMode === 'calendar'
+                ? 'bg-white dark:bg-slate-700 text-amber-600 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+          >
+            <CalendarDays size={12} />
+            Calendário Grande
+          </button>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl shadow-sm">
+          <Search className="absolute left-3.5 top-3.5 text-slate-400" size={16} />
+          <input
+            type="text"
+            placeholder="Pesquisar notas por título, conteúdo ou cliente..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-transparent border-0 rounded-2xl py-3 pl-11 pr-4 text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
+          />
+        </div>
       </div>
 
-      {/* Notes Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filtered.length === 0 ? (
-          <div className="col-span-full py-16 text-center text-slate-400 font-medium text-xs border-2 border-dashed border-slate-200 dark:border-slate-800/60 rounded-3xl">
-            Nenhuma nota registrada ainda. Clique em "Nova Nota Notion" para começar!
-          </div>
-        ) : (
-          filtered.map((note) => {
-            const isOwnNote = !currentUser || note.user === currentUser.name || note.user === currentUser.email || currentUser.role === 'Administrador';
-            return (
-              <div
-                key={note.id}
-                className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/50 p-5 rounded-3xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+      {/* Notes Display Area */}
+      {showOnlyScheduled && viewMode === 'calendar' ? (
+        /* BIG CALENDAR VIEW */
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/50 rounded-3xl shadow-sm overflow-hidden flex flex-col min-h-[700px] animate-in fade-in zoom-in-95 duration-300">
+          {/* Calendar Header */}
+          <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-950/50">
+            <div className="flex items-center gap-4">
+              <h2 className="text-xl font-black text-slate-900 dark:text-white capitalize">
+                {calendarDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+              </h2>
+              <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <button 
+                  onClick={handlePrevMonth}
+                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-500 transition-colors"
+                >
+                  <RotateCcw size={14} className="-scale-x-100" />
+                </button>
+                <button 
+                  onClick={() => setCalendarDate(new Date())}
+                  className="px-3 py-1 text-[10px] font-black uppercase text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-colors"
+                >
+                  Hoje
+                </button>
+                <button 
+                  onClick={handleNextMonth}
+                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-500 transition-colors"
+                >
+                  <RotateCw size={14} className="-scale-x-100" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Google Style Calendar</span>
+              <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2" />
+              <button
+                onClick={() => setViewMode('grid')}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 transition-all"
+                title="Voltar para Grid"
               >
-                <div>
-                  <div className="flex justify-between items-start gap-3">
-                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
-                      {note.title}
-                    </h3>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {isOwnNote && (
-                        <button
-                          onClick={() => {
+                <Grid3X3 size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Calendar Grid */}
+          <div className="flex-1 flex flex-col">
+            {/* Week Days Header */}
+            <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
+              {weekDays.map(day => (
+                <div key={day} className="py-3 text-center text-[10px] font-black uppercase text-slate-400 tracking-tighter">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Day Cells */}
+            <div className="flex-1 grid grid-cols-7 auto-rows-fr">
+              {calendarDays.map((date, idx) => {
+                if (!date) return <div key={`empty-${idx}`} className="border-r border-b border-slate-50 dark:border-slate-900/50 bg-slate-50/30 dark:bg-slate-950/20" />;
+                
+                const dateStr = date.toISOString().split('T')[0];
+                const dayNotes = anotacoes.filter(n => n.scheduledDate === dateStr);
+                const isToday = date.toDateString() === new Date().toDateString();
+
+                return (
+                  <div 
+                    key={dateStr} 
+                    className={`group relative border-r border-b border-slate-100 dark:border-slate-800 p-2 min-h-[120px] transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-900/30 ${isToday ? 'bg-indigo-500/5' : ''}`}
+                    onClick={() => {
+                      resetForm();
+                      setScheduledDate(dateStr);
+                      setIsScheduled(true);
+                      setIsOpen(true);
+                    }}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <span className={`text-xs font-black w-6 h-6 flex items-center justify-center rounded-full transition-all ${
+                        isToday 
+                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20' 
+                          : 'text-slate-500 dark:text-slate-400 group-hover:text-indigo-500'
+                      }`}>
+                        {date.getDate()}
+                      </span>
+                      
+                      <button className="opacity-0 group-hover:opacity-100 p-1 text-indigo-500 hover:bg-indigo-500/10 rounded-lg transition-all">
+                        <Plus size={12} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-1 overflow-y-auto max-h-[100px] custom-scrollbar">
+                      {dayNotes.map(note => (
+                        <div 
+                          key={note.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setEditingAnotacao(note);
                             setTitle(note.title);
                             setHasDrawing(!!note.hasDrawing);
                             setIsOpen(true);
                           }}
-                          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
-                          title="Editar"
+                          className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md shadow-xs cursor-pointer hover:border-indigo-400 hover:shadow-sm transition-all group/note truncate"
                         >
-                          <Pencil size={13} />
+                          <span className="text-[9px] font-bold text-slate-700 dark:text-slate-200 group-hover/note:text-indigo-600">
+                            {note.title || 'Sem título'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Notes Grid */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filtered.length === 0 ? (
+            <div className="col-span-full py-16 text-center text-slate-400 font-medium text-xs border-2 border-dashed border-slate-200 dark:border-slate-800/60 rounded-3xl">
+              Nenhuma nota registrada ainda. Clique em "Nova Nota Notion" para começar!
+            </div>
+          ) : (
+            filtered.map((note) => {
+              const isOwnNote = !currentUser || note.user === currentUser.name || note.user === currentUser.email || currentUser.role === 'Administrador';
+              return (
+                <div
+                  key={note.id}
+                  className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/50 p-5 rounded-3xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex justify-between items-start gap-3">
+                      <h3 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
+                        {note.title}
+                      </h3>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isOwnNote && (
+                          <button
+                            onClick={() => {
+                              setEditingAnotacao(note);
+                              setTitle(note.title);
+                              setHasDrawing(!!note.hasDrawing);
+                              setIsOpen(true);
+                            }}
+                            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                            title="Editar"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setItemToDeleteId(note.id)}
+                          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-lg text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+                          title="Excluir"
+                        >
+                          <Trash2 size={13} />
                         </button>
-                      )}
-                      <button
-                        onClick={() => setItemToDeleteId(note.id)}
-                        className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-lg text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                        title="Excluir"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      </div>
                     </div>
-                  </div>
 
-                  {note.entityName && (
-                    <span className="inline-block mt-2 text-[9px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded font-extrabold uppercase">
-                      Vinculado: {note.entityName}
-                    </span>
-                  )}
-
-                  {/* Aesthetic Paper + Sketch overlaid preview */}
-                  <div 
-                    onClick={() => {
-                      setEditingAnotacao(note);
-                      setTitle(note.title);
-                      setHasDrawing(!!note.hasDrawing);
-                      setIsOpen(true);
-                    }}
-                    className="relative mt-4 border border-slate-150 dark:border-slate-850 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 aspect-[8/5.5] group cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-900/50 transition-all shadow-inner"
-                  >
-                    {/* Visual paper layer with actual formatted content */}
-                    <div className="absolute inset-0 p-5 overflow-hidden text-[10px] leading-relaxed select-none opacity-85 max-h-full notion-editor-sheet">
-                      <div 
-                        className="space-y-1.5 [&_img]:max-h-16 [&_img]:rounded-lg [&_img]:object-contain [&_input]:pointer-events-none"
-                        dangerouslySetInnerHTML={{ __html: note.content }}
-                      />
-                    </div>
-                    
-                    {/* Draw layer overlaid on top */}
-                    {note.hasDrawing && note.drawingData && (
-                      <img
-                        src={note.drawingData}
-                        alt="Esboço"
-                        className="absolute inset-0 w-full h-full object-contain pointer-events-none brightness-100 dark:brightness-95 contrast-105"
-                        referrerPolicy="no-referrer"
-                      />
+                    {note.scheduledDate && (
+                      <div className="flex items-center gap-1.5 mt-2 text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded font-bold">
+                        <CalendarDays size={12} />
+                        Agenda: {note.scheduledDate.split('-').reverse().join('/')}
+                      </div>
                     )}
-                    
-                    {/* Hover Overlay */}
-                    <div className="absolute inset-0 bg-slate-900/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px]">
-                      <span className="bg-slate-900/95 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl shadow flex items-center gap-1.5 border border-slate-700/50">
-                        <Paintbrush size={11} /> Abrir & Rabiscar Nota
+
+                    {note.entityName && (
+                      <span className="inline-block mt-2 text-[9px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded font-extrabold uppercase">
+                        Vinculado: {note.entityName}
                       </span>
+                    )}
+
+                    {/* Aesthetic Paper + Sketch overlaid preview */}
+                    <div 
+                      onClick={() => {
+                        setEditingAnotacao(note);
+                        setTitle(note.title);
+                        setHasDrawing(!!note.hasDrawing);
+                        setIsOpen(true);
+                      }}
+                      className="relative mt-4 border border-slate-150 dark:border-slate-850 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 aspect-[8/5.5] group cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-900/50 transition-all shadow-inner"
+                    >
+                      {/* Visual paper layer with actual formatted content */}
+                      <div className="absolute inset-0 p-5 overflow-hidden text-[10px] leading-relaxed select-none opacity-85 max-h-full notion-editor-sheet">
+                        <div 
+                          className="space-y-1.5 [&_img]:max-h-16 [&_img]:rounded-lg [&_img]:object-contain [&_input]:pointer-events-none"
+                          dangerouslySetInnerHTML={{ __html: note.content }}
+                        />
+                      </div>
+                      
+                      {/* Draw layer overlaid on top */}
+                      {note.hasDrawing && note.drawingData && (
+                        <img
+                          src={note.drawingData}
+                          alt="Esboço"
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none brightness-100 dark:brightness-95 contrast-105"
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
+                      
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 bg-slate-900/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px]">
+                        <span className="bg-slate-900/95 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl shadow flex items-center gap-1.5 border border-slate-700/50">
+                          <Paintbrush size={11} /> Abrir & Rabiscar Nota
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="mt-5 pt-3.5 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                  <span className="flex items-center gap-1.5">
-                    <User size={11} className="text-slate-400" /> {note.user}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Calendar size={11} className="text-slate-400" /> {note.createdAt.split('-').reverse().join('/')}
-                  </span>
+                  <div className="mt-5 pt-3.5 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                    <span className="flex items-center gap-1.5">
+                      <User size={11} className="text-slate-400" /> {note.user}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Calendar size={11} className="text-slate-400" /> {note.createdAt.split('-').reverse().join('/')}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* CREATE / EDIT WYSIWYG NOTION WORKSPACE */}
       <AnimatePresence>
@@ -865,16 +1163,51 @@ export default function AnotacoesView({
               {/* Work Area / Single Center Sheet Canvas */}
               <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 flex flex-col items-center">
                 
-                {/* 1. Title Input (Framed like Notion header) */}
-                <div className="w-full max-w-4xl mb-4 shrink-0">
-                  <input
-                    type="text"
-                    required
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Sem título (Nota do Notion)"
-                    className="w-full bg-transparent border-0 border-b border-slate-200/50 dark:border-slate-800/50 pb-2 text-xl text-slate-900 dark:text-white font-extrabold focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
+                {/* 1. Title & Schedule Row (Framed like Notion header) */}
+                <div className="w-full max-w-4xl mb-4 shrink-0 flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+                  <div className="flex-1 w-full">
+                    <input
+                      type="text"
+                      required
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Sem título (Nota do Notion)"
+                      className="w-full bg-transparent border-0 border-b border-slate-200/50 dark:border-slate-800/50 pb-2 text-xl text-slate-900 dark:text-white font-extrabold focus:outline-none focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+                  
+                  {/* Scheduling Toggle & Picker */}
+                  <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 rounded-2xl shadow-sm self-stretch sm:self-auto">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="enable-schedule"
+                        checked={isScheduled}
+                        onChange={(e) => {
+                          setIsScheduled(e.target.checked);
+                          if (e.target.checked && !scheduledDate) {
+                            setScheduledDate(new Date().toISOString().split('T')[0]);
+                          }
+                        }}
+                        className="rounded border-slate-300 dark:border-slate-700 text-amber-500 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      <label htmlFor="enable-schedule" className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase cursor-pointer select-none">
+                        Agendar na Agenda
+                      </label>
+                    </div>
+                    
+                    {isScheduled && (
+                      <div className="flex items-center gap-2 pl-3 border-l border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-left-2">
+                        <CalendarDays size={14} className="text-amber-500" />
+                        <input
+                          type="date"
+                          value={scheduledDate}
+                          onChange={(e) => setScheduledDate(e.target.value)}
+                          className="bg-transparent border-0 text-[11px] font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* 2. Compound Notion Page Sheet with canvas overlay */}
@@ -882,43 +1215,42 @@ export default function AnotacoesView({
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`w-full max-w-4xl aspect-[8/5.5] relative bg-white dark:bg-slate-900 border ${
+                  className={`w-full max-w-4xl h-[520px] overflow-y-auto relative bg-white dark:bg-slate-900 border ${
                     isDraggingFile ? 'border-dashed border-indigo-500 bg-indigo-50/5' : 'border-slate-200 dark:border-slate-800'
-                  } rounded-2xl shadow-sm flex flex-col overflow-hidden min-h-[460px] max-h-[580px]`}
+                  } rounded-2xl shadow-sm flex flex-col`}
                 >
-                  {/* Rich Text Editor Layer (Behind) */}
-                  <div
-                    ref={editorRef}
-                    contentEditable={drawingTool === 'cursor'}
-                    onPaste={handlePaste}
-                    onClick={handleEditorClick}
-                    placeholder="Digite livremente na nota. Você pode colar imagens (Ctrl+V) ou arrastá-las aqui..."
-                    className={`absolute inset-0 p-8 overflow-y-auto text-xs text-slate-800 dark:text-slate-100 outline-none leading-relaxed select-text notion-editor-sheet ${
-                      drawingTool === 'cursor' ? 'pointer-events-auto z-0' : 'pointer-events-none z-0'
-                    }`}
-                  />
+                  <div className="relative w-full min-h-full">
+                    {/* Rich Text Editor Layer (Behind/Inline) */}
+                    <div
+                      ref={editorRef}
+                      contentEditable={drawingTool === 'cursor'}
+                      onPaste={handlePaste}
+                      onClick={handleEditorClick}
+                      placeholder="Digite livremente na nota. Você pode colar imagens (Ctrl+V) ou arrastá-las aqui..."
+                      className="w-full p-8 text-xs text-slate-800 dark:text-slate-100 outline-none leading-relaxed select-text notion-editor-sheet"
+                      style={{ minHeight: '440px' }}
+                    />
 
-                  {/* Transparent Canvas Drawing Overlay (In front when tool is selected) */}
-                  <canvas
-                    ref={canvasRef}
-                    width={800}
-                    height={550}
-                    onMouseDown={startDrawing}
-                    onMouseMove={draw}
-                    onMouseUp={stopDrawing}
-                    onMouseLeave={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDrawing}
-                    className={`absolute inset-0 w-full h-full cursor-crosshair ${
-                      drawingTool === 'cursor' ? 'pointer-events-none z-0' : 'pointer-events-auto z-10'
-                    }`}
-                    style={{
-                      backgroundImage: isGridEnabled ? 'radial-gradient(circle, currentColor 1.2px, transparent 1.2px)' : 'none',
-                      backgroundSize: '24px 24px',
-                      color: document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'
-                    }}
-                  />
+                    {/* Transparent Canvas Drawing Overlay (In front when tool is selected) */}
+                    <canvas
+                      ref={canvasRef}
+                      onMouseDown={startDrawing}
+                      onMouseMove={draw}
+                      onMouseUp={stopDrawing}
+                      onMouseLeave={stopDrawing}
+                      onTouchStart={startDrawing}
+                      onTouchMove={draw}
+                      onTouchEnd={stopDrawing}
+                      className={`absolute inset-0 w-full h-full cursor-crosshair ${
+                        drawingTool === 'cursor' ? 'pointer-events-none z-0' : 'pointer-events-auto z-10'
+                      }`}
+                      style={{
+                        backgroundImage: isGridEnabled ? 'radial-gradient(circle, currentColor 1.2px, transparent 1.2px)' : 'none',
+                        backgroundSize: '24px 24px',
+                        color: document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'
+                      }}
+                    />
+                  </div>
 
                   {/* Drag Over Overlay Alert */}
                   {isDraggingFile && (

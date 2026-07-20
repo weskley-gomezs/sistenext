@@ -52,6 +52,7 @@ import ConfiguracoesView from './components/ConfiguracoesView';
 import EquipeView from './components/EquipeView';
 import OportunidadesView from './components/OportunidadesView';
 import MarketingView from './marketing/pages/MarketingView';
+import { NotificationBell } from './components/NotificationBell';
 
 // Simple Chronological Timeline of all Follow-ups across the system
 import { History, CalendarClock, User } from 'lucide-react';
@@ -1136,6 +1137,10 @@ export default function App() {
                 Painel do Consultor
               </div>
             )}
+
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1 hidden sm:block" />
+            
+            <NotificationBell agenda={agenda} onNavigate={(sec) => setActiveSection(sec as any)} />
           </div>
         </div>
         <div className="flex-1">

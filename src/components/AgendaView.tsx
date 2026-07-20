@@ -3,6 +3,7 @@ import { Plus, Calendar, Clock, Video, User, FileText, ChevronRight, X, Trash2, 
 import { motion, AnimatePresence } from 'motion/react';
 import { AgendaItem, Lead, Cliente } from '../types';
 import { ConfirmModal } from './ConfirmModal';
+import CalendarComponent from './CalendarComponent';
 
 interface AgendaViewProps {
   agenda: AgendaItem[];
@@ -23,6 +24,7 @@ export default function AgendaView({
 }: AgendaViewProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
 
   // Form Fields
   const [title, setTitle] = useState('');
@@ -79,6 +81,17 @@ export default function AgendaView({
     }
   };
 
+  const handleEventDrop = async (eventId: string, start: Date, end: Date) => {
+    const newDate = start.toISOString().split('T')[0];
+    const newTime = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+    
+    try {
+      await onUpdateAgenda(eventId, { date: newDate, time: newTime });
+    } catch (err) {
+      console.error('Failed to update event via drag and drop:', err);
+    }
+  };
+
   const upcomingItems = agenda
     .filter((a) => a.status === 'Pendente' || !a.status)
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
@@ -100,19 +113,54 @@ export default function AgendaView({
             Planeje chamadas de diagnóstico, apresentações de protótipos de IA e reuniões gerais com links de videoconferência.
           </p>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setIsOpen(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-500/10 cursor-pointer"
-        >
-          <Plus size={14} /> Agendar Compromisso
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="bg-slate-100 dark:bg-slate-900 p-1 rounded-xl flex items-center border border-slate-200 dark:border-slate-800">
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-2 ${
+                viewMode === 'calendar'
+                  ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <Calendar size={14} /> Calendário
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-2 ${
+                viewMode === 'list'
+                  ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <FileText size={14} /> Lista
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              resetForm();
+              setIsOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-500/10 cursor-pointer"
+          >
+            <Plus size={14} /> Agendar Compromisso
+          </button>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-4 border-b border-slate-200 dark:border-slate-800">
+      {viewMode === 'calendar' ? (
+        <CalendarComponent 
+          events={agenda} 
+          onEventDrop={handleEventDrop}
+          onSelectEvent={(event) => {
+            // Optional: open a details modal or edit form
+            console.log('Event selected:', event);
+          }}
+        />
+      ) : (
+        <>
+          {/* Tabs */}
+          <div className="flex items-center gap-4 border-b border-slate-200 dark:border-slate-800">
         <button
           onClick={() => setActiveTab('upcoming')}
           className={`pb-2 px-1 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
@@ -308,6 +356,8 @@ export default function AgendaView({
           </div>
         </div>
       </div>
+    </>
+  )}
 
       {/* DRAWER FORM */}
       <AnimatePresence>
