@@ -985,6 +985,7 @@ export default function App() {
             clientes={filteredClientes}
             projetos={filteredProjetos}
             financeiro={filteredFinanceiro}
+            contratos={filteredContratos}
             customLogo={customLogo}
             companyName={companyName}
           />

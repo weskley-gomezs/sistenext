@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { FileDown, Filter, Calendar, Users, Building2, CircleDollarSign, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Cliente, Projeto, Financeiro } from '../types';
+import { Cliente, Projeto, Financeiro, Contrato } from '../types';
 import { exportToPDF } from '../utils/pdfExport';
 
 interface RelatoriosViewProps {
   clientes: Cliente[];
   projetos: Projeto[];
   financeiro: Financeiro[];
+  contratos: Contrato[];
   customLogo?: string | null;
   companyName?: string | null;
 }
 
-export default function RelatoriosView({ clientes, projetos, financeiro, customLogo, companyName }: RelatoriosViewProps) {
+export default function RelatoriosView({ clientes, projetos, financeiro, contratos, customLogo, companyName }: RelatoriosViewProps) {
   const [reportType, setReportType] = useState<'finance' | 'clients' | 'projects'>('finance');
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
@@ -65,14 +66,18 @@ export default function RelatoriosView({ clientes, projetos, financeiro, customL
       exportToPDF({ title: 'RELATÓRIO FINANCEIRO', head, body, summary, customLogo: customLogo || undefined, companyName: companyName || undefined });
     } else if (reportType === 'clients') {
       const head = [['Empresa', 'Responsável', 'Telefone', 'Status', 'Tipo', 'Valor Contrato']];
-      const body = filteredData.map((c: any) => [
-        c.companyName,
-        c.name,
-        c.phone,
-        c.status,
-        c.contractType || 'Fixo',
-        formatBRL(c.contractValue || 0)
-      ]);
+      const body = filteredData.map((c: Cliente) => {
+        const clientContracts = contratos.filter(cont => cont.clientId === c.id);
+        const activeCont = clientContracts.find(cont => cont.status === 'Assinado') || clientContracts[0];
+        return [
+          c.companyName,
+          c.name,
+          c.phone,
+          c.status,
+          activeCont ? (activeCont.contractType || 'Fixo') : (c.contractType || 'Fixo'),
+          formatBRL(activeCont ? (activeCont.value || 0) : (c.contractValue || 0))
+        ];
+      });
       exportToPDF({ title: 'RELATÓRIO DE CLIENTES', head, body, customLogo: customLogo || undefined, companyName: companyName || undefined });
     } else if (reportType === 'projects') {
       const head = [['Projeto', 'Cliente', 'Status', 'Prazo', 'Valor']];
@@ -233,7 +238,11 @@ export default function RelatoriosView({ clientes, projetos, financeiro, customL
               <div className="bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 p-5 rounded-[24px]">
                 <p className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Ticket Médio</p>
                 <h3 className="text-2xl font-black text-indigo-700 dark:text-indigo-300 mt-1">
-                  {formatBRL(filteredData.reduce((sum: number, c: any) => sum + (c.contractValue || 0), 0) / (filteredData.length || 1))}
+                  {formatBRL(filteredData.reduce((sum: number, c: Cliente) => {
+                    const clientContracts = contratos.filter(cont => cont.clientId === c.id);
+                    const activeCont = clientContracts.find(cont => cont.status === 'Assinado') || clientContracts[0];
+                    return sum + (activeCont ? (activeCont.value || 0) : (c.contractValue || 0));
+                  }, 0) / (filteredData.length || 1))}
                 </h3>
                 <p className="text-[10px] text-indigo-600/60 font-bold mt-0.5">Faturamento por cliente</p>
               </div>
@@ -290,7 +299,12 @@ export default function RelatoriosView({ clientes, projetos, financeiro, customL
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-[10px] font-mono font-bold text-slate-500">
-                            {item.date || item.deadline || 'S/D'}
+                            {(() => {
+                              if (reportType === 'clients') {
+                                return item.createdAt ? item.createdAt.split('-').reverse().join('/') : 'S/D';
+                              }
+                              return item.date || item.deadline || 'S/D';
+                            })()}
                           </p>
                         </td>
                         <td className="px-6 py-4">
@@ -306,7 +320,14 @@ export default function RelatoriosView({ clientes, projetos, financeiro, customL
                         </td>
                         <td className="px-6 py-4 text-right">
                           <span className="text-[11px] font-mono font-black text-slate-900 dark:text-white">
-                            {formatBRL(item.value || item.contractValue || 0)}
+                            {(() => {
+                              if (reportType === 'clients') {
+                                const clientContracts = contratos.filter(cont => cont.clientId === item.id);
+                                const activeCont = clientContracts.find(cont => cont.status === 'Assinado') || clientContracts[0];
+                                return formatBRL(activeCont ? (activeCont.value || 0) : (item.contractValue || 0));
+                              }
+                              return formatBRL(item.value || item.contractValue || 0);
+                            })()}
                           </span>
                         </td>
                       </tr>
