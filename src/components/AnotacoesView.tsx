@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, ClipboardList, Trash2, Search, User, Calendar, X } from 'lucide-react';
+import { Plus, ClipboardList, Trash2, Search, User, Calendar, X, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anotacao } from '../types';
 import { ConfirmModal } from './ConfirmModal';
@@ -7,17 +7,22 @@ import { ConfirmModal } from './ConfirmModal';
 interface AnotacoesViewProps {
   anotacoes: Anotacao[];
   onAddAnotacao: (note: Omit<Anotacao, 'id'>) => Promise<string>;
+  onUpdateAnotacao?: (id: string, note: Partial<Anotacao>) => Promise<void>;
   onDeleteAnotacao: (id: string, justification: string, data: Anotacao) => Promise<void>;
+  currentUser?: any;
 }
 
 export default function AnotacoesView({
   anotacoes,
   onAddAnotacao,
-  onDeleteAnotacao
+  onUpdateAnotacao,
+  onDeleteAnotacao,
+  currentUser
 }: AnotacoesViewProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [itemToDeleteId, setItemToDeleteId] = useState<string | null>(null);
+  const [editingAnotacao, setEditingAnotacao] = useState<Anotacao | null>(null);
 
   // Form Fields
   const [title, setTitle] = useState('');
@@ -25,25 +30,43 @@ export default function AnotacoesView({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload: Omit<Anotacao, 'id'> = {
-      title,
-      content,
-      createdAt: new Date().toISOString().split('T')[0],
-      user: 'Consultor Sênior'
-    };
 
-    try {
-      await onAddAnotacao(payload);
-      setIsOpen(false);
-      resetForm();
-    } catch (err) {
-      console.error(err);
+    if (editingAnotacao) {
+      if (onUpdateAnotacao) {
+        try {
+          await onUpdateAnotacao(editingAnotacao.id, {
+            title,
+            content
+          });
+          setIsOpen(false);
+          setEditingAnotacao(null);
+          resetForm();
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    } else {
+      const payload: Omit<Anotacao, 'id'> = {
+        title,
+        content,
+        createdAt: new Date().toISOString().split('T')[0],
+        user: currentUser?.name || currentUser?.email || 'Consultor Sênior'
+      };
+
+      try {
+        await onAddAnotacao(payload);
+        setIsOpen(false);
+        resetForm();
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
   const resetForm = () => {
     setTitle('');
     setContent('');
+    setEditingAnotacao(null);
   };
 
   const filtered = anotacoes.filter((n) => {
@@ -96,49 +119,69 @@ export default function AnotacoesView({
             Nenhuma anotação registrada ainda.
           </div>
         ) : (
-          filtered.map((note) => (
-            <div
-              key={note.id}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex justify-between items-start">
-                  <h3 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
-                    {note.title}
-                  </h3>
-                  <button
-                    onClick={() => setItemToDeleteId(note.id)}
-                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+          filtered.map((note) => {
+            const isOwnNote = !currentUser || note.user === currentUser.name || note.user === currentUser.email || currentUser.role === 'Administrador';
+            return (
+              <div
+                key={note.id}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex justify-between items-start gap-2">
+                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
+                      {note.title}
+                    </h3>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isOwnNote && (
+                        <button
+                          onClick={() => {
+                            setEditingAnotacao(note);
+                            setTitle(note.title);
+                            setContent(note.content);
+                            setIsOpen(true);
+                          }}
+                          className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-500 transition-colors cursor-pointer"
+                          title="Editar"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setItemToDeleteId(note.id)}
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+                        title="Excluir"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {note.entityName && (
+                    <span className="inline-block mt-1.5 text-[9px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded font-extrabold uppercase">
+                      Vinculado: {note.entityName}
+                    </span>
+                  )}
+
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-4 leading-relaxed whitespace-pre-wrap">
+                    {note.content}
+                  </p>
                 </div>
 
-                {note.entityName && (
-                  <span className="inline-block mt-1.5 text-[9px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded font-extrabold uppercase">
-                    Vinculado: {note.entityName}
+                <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                  <span className="flex items-center gap-1">
+                    <User size={11} /> {note.user}
                   </span>
-                )}
-
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-4 leading-relaxed whitespace-pre-wrap">
-                  {note.content}
-                </p>
+                  <span className="flex items-center gap-1">
+                    <Calendar size={11} /> {note.createdAt.split('-').reverse().join('/')}
+                  </span>
+                </div>
               </div>
-
-              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono">
-                <span className="flex items-center gap-1">
-                  <User size={11} /> {note.user}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Calendar size={11} /> {note.createdAt.split('-').reverse().join('/')}
-                </span>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* CREATE FORM */}
+      {/* CREATE / EDIT FORM */}
       <AnimatePresence>
         {isOpen && (
           <div className="fixed inset-0 z-50 flex justify-end">
@@ -146,7 +189,10 @@ export default function AnotacoesView({
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.6 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                setIsOpen(false);
+                resetForm();
+              }}
               className="fixed inset-0 bg-black/80"
             />
 
@@ -159,10 +205,13 @@ export default function AnotacoesView({
             >
               <div className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-900 mb-6">
                 <h3 className="text-md font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  Criar Anotação / Scratchpad
+                  {editingAnotacao ? 'Editar Anotação' : 'Criar Anotação / Scratchpad'}
                 </h3>
                 <button
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => {
+                    setIsOpen(false);
+                    resetForm();
+                  }}
                   className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-lg text-slate-400 cursor-pointer"
                 >
                   <X size={18} />
@@ -199,11 +248,14 @@ export default function AnotacoesView({
                     type="submit"
                     className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-all shadow-md shadow-indigo-500/10 cursor-pointer"
                   >
-                    Salvar Anotação
+                    {editingAnotacao ? 'Salvar Alterações' : 'Salvar Anotação'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => {
+                      setIsOpen(false);
+                      resetForm();
+                    }}
                     className="py-2.5 px-4 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-lg transition-all cursor-pointer"
                   >
                     Cancelar

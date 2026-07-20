@@ -889,10 +889,15 @@ export default function App() {
               if (!user?.ownerId) return Promise.reject('No ownerId');
               return addItem('anotacoes', { ...payload, ownerId: user.ownerId }, user.ownerId);
             }}
+            onUpdateAnotacao={(id, payload) => {
+              if (!user?.ownerId) return Promise.resolve();
+              return updateItem('anotacoes', id, payload, user.ownerId);
+            }}
             onDeleteAnotacao={(id, justification, data) => {
               if (!user?.ownerId) return Promise.resolve();
               return deleteItemWithJustification('anotacoes', id, data, justification, user.ownerId);
             }}
+            currentUser={user}
           />
         );
       case 'documentos':
