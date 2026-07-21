@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import {
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signOut
 } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
-import { Cpu, Mail, Lock, ShieldCheck, UserPlus, LogIn, Key, Sparkles, ArrowRight, Building, Fingerprint, ChevronLeft } from 'lucide-react';
+import { Mail, Lock, LogIn, Key, Sparkles, ArrowRight, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 const nexusErpLogo = 'https://i.imgur.com/BewcRiJ.png';
 
@@ -17,13 +16,9 @@ interface LoginViewProps {
 }
 
 export default function LoginView({ onLoginSuccess, onBackToLanding }: LoginViewProps) {
-  const [isSignUp, setIsSignUp] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [taxId, setTaxId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -51,86 +46,44 @@ export default function LoginView({ onLoginSuccess, onBackToLanding }: LoginView
       return;
     }
 
-    if (isSignUp) {
-      if (!companyName.trim()) {
-        setError('Por favor, informe o nome da sua empresa.');
-        setLoading(false);
-        return;
-      }
-      if (!taxId.trim()) {
-        setError('Por favor, informe seu CPF ou CNPJ.');
-        setLoading(false);
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError('As senhas não coincidem.');
-        setLoading(false);
-        return;
-      }
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        
-        // Store extra info in Firestore
-        await setDoc(doc(db, 'user_profiles', userCredential.user.uid), {
-          email: email.trim().toLowerCase(),
-          companyName: companyName.trim(),
-          taxId: taxId.trim(),
-          role: 'Administrador',
-          ownerId: userCredential.user.uid, // Admin is their own owner
-          createdAt: new Date().toISOString()
-        });
+    try {
+      // 1. Check if there is a team member with this email and password in Firestore
+      const teamRef = collection(db, 'equipe');
+      const q = query(
+        teamRef,
+        where('email', '==', email.trim().toLowerCase()),
+        where('password', '==', password)
+      );
+      const querySnapshot = await getDocs(q);
 
-        onLoginSuccess({
-          ...userCredential.user,
-          role: 'Administrador',
-          ownerId: userCredential.user.uid,
-          companyName: companyName.trim(),
-          taxId: taxId.trim()
-        });
-      } catch (err: any) {
-        console.error(err);
-        setError(translateFirebaseError(err.code) || 'Erro ao criar conta.');
-      }
-    } else {
-      try {
-        // 1. Check if there is a team member with this email and password in Firestore
-        const teamRef = collection(db, 'equipe');
-        const q = query(
-          teamRef,
-          where('email', '==', email.trim().toLowerCase()),
-          where('password', '==', password)
-        );
-        const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const docSnap = querySnapshot.docs[0];
+        const membroData = docSnap.data();
 
-        if (!querySnapshot.empty) {
-          const docSnap = querySnapshot.docs[0];
-          const membroData = docSnap.data();
-
-          if (membroData.status === 'Inativo') {
-            setError('Esta conta de vendedor está inativa. Entre em contato com o administrador.');
-            setLoading(false);
-            return;
-          }
-
-          // Successful Team Login!
-          onLoginSuccess({
-            email: membroData.email,
-            uid: membroData.id,
-            displayName: membroData.name,
-            role: membroData.role,
-            isMembro: true
-          });
+        if (membroData.status === 'Inativo') {
+          setError('Esta conta de vendedor está inativa. Entre em contato com o administrador.');
           setLoading(false);
           return;
         }
 
-        // 2. Fall back to standard Firebase Authentication
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        onLoginSuccess(userCredential.user);
-      } catch (err: any) {
-        console.error(err);
-        setError(translateFirebaseError(err.code) || 'Credenciais inválidas ou e-mail/senha incorretos.');
+        // Successful Team Login!
+        onLoginSuccess({
+          email: membroData.email,
+          uid: membroData.id,
+          displayName: membroData.name,
+          role: membroData.role,
+          isMembro: true
+        });
+        setLoading(false);
+        return;
       }
+
+      // 2. Fall back to standard Firebase Authentication
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      onLoginSuccess(userCredential.user);
+    } catch (err: any) {
+      console.error(err);
+      setError(translateFirebaseError(err.code) || 'Credenciais inválidas ou e-mail/senha incorretos.');
     }
     setLoading(false);
   };
@@ -138,9 +91,11 @@ export default function LoginView({ onLoginSuccess, onBackToLanding }: LoginView
   const handleDemoLogin = () => {
     // Quick Demo Mode for immediate testing
     onLoginSuccess({
-      email: 'demo@sistenext.com.br',
+      email: 'convidado@sistenext.com.br',
       uid: 'demo-user-id',
+      ownerId: 'demo-user-id',
       displayName: 'Arquiteto de Software Sênior',
+      name: 'Arquiteto de Software Sênior',
       isDemo: true
     });
   };
@@ -202,15 +157,11 @@ export default function LoginView({ onLoginSuccess, onBackToLanding }: LoginView
           <h2 className="text-lg font-bold text-white">
             {isForgotPassword
               ? 'Recuperar Senha'
-              : isSignUp
-              ? 'Criar Conta Premium'
               : 'Bem-vindo de volta'}
           </h2>
           <p className="text-xs text-slate-400 mt-1">
             {isForgotPassword
               ? 'Insira seu e-mail para receber as instruções'
-              : isSignUp
-              ? 'Comece a escalar suas vendas com IA integrada'
               : 'Faça login para gerenciar sua operação SaaS'}
           </p>
         </div>
@@ -247,67 +198,23 @@ export default function LoginView({ onLoginSuccess, onBackToLanding }: LoginView
             </div>
           </div>
 
-          {isSignUp && (
-            <>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Nome da Empresa
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
-                    <Building size={16} />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="Sua Agência / Empresa"
-                    className="w-full bg-slate-950/60 border border-slate-800 focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/50 text-white rounded-lg py-2 pl-10 pr-4 text-sm transition-all outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  CNPJ ou CPF
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
-                    <Fingerprint size={16} />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={taxId}
-                    onChange={(e) => setTaxId(e.target.value)}
-                    placeholder="00.000.000/0001-00"
-                    className="w-full bg-slate-950/60 border border-slate-800 focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/50 text-white rounded-lg py-2 pl-10 pr-4 text-sm transition-all outline-none"
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
           {!isForgotPassword && (
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
                   Senha
                 </label>
-                {!isSignUp && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsForgotPassword(true);
-                      setError('');
-                      setMessage('');
-                    }}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
-                  >
-                    Esqueceu?
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsForgotPassword(true);
+                    setError('');
+                    setMessage('');
+                  }}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
+                >
+                  Esqueceu?
+                </button>
               </div>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
@@ -318,27 +225,6 @@ export default function LoginView({ onLoginSuccess, onBackToLanding }: LoginView
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="******"
-                  className="w-full bg-slate-950/60 border border-slate-800 focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/50 text-white rounded-lg py-2 pl-10 pr-4 text-sm transition-all outline-none"
-                />
-              </div>
-            </div>
-          )}
-
-          {isSignUp && !isForgotPassword && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                Confirmar Senha
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
-                  <ShieldCheck size={16} />
-                </span>
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="******"
                   className="w-full bg-slate-950/60 border border-slate-800 focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/50 text-white rounded-lg py-2 pl-10 pr-4 text-sm transition-all outline-none"
                 />
@@ -357,10 +243,6 @@ export default function LoginView({ onLoginSuccess, onBackToLanding }: LoginView
               <>
                 <Key size={16} /> Enviar E-mail
               </>
-            ) : isSignUp ? (
-              <>
-                <UserPlus size={16} /> Criar Conta Premium
-              </>
             ) : (
               <>
                 <LogIn size={16} /> Acessar Sistema
@@ -371,7 +253,7 @@ export default function LoginView({ onLoginSuccess, onBackToLanding }: LoginView
 
         {/* Footer Switches */}
         <div className="mt-6 flex flex-col items-center gap-3">
-          {isForgotPassword ? (
+          {isForgotPassword && (
             <button
               onClick={() => {
                 setIsForgotPassword(false);
@@ -381,17 +263,6 @@ export default function LoginView({ onLoginSuccess, onBackToLanding }: LoginView
               className="text-xs text-slate-400 hover:text-white transition-colors"
             >
               Voltar para o Login
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError('');
-                setMessage('');
-              }}
-              className="text-xs text-slate-400 hover:text-white transition-colors font-medium"
-            >
-              {isSignUp ? 'Já tem uma conta? Entre agora' : 'Não tem conta? Cadastre-se'}
             </button>
           )}
 

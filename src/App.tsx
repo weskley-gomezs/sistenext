@@ -30,6 +30,21 @@ import {
   ClienteAssinatura,
   Oportunidade
 } from './types';
+import {
+  mockLeads,
+  mockClientes,
+  mockProjetos,
+  mockFinanceiro,
+  mockAgenda,
+  mockFollowUps,
+  mockMembros,
+  mockOportunidades,
+  mockEmpresas,
+  mockPropostas,
+  mockContratos,
+  mockAnotacoes,
+  mockDocumentos
+} from './mockData';
 
 // Components
 import Sidebar, { ActiveSection } from './components/Sidebar';
@@ -141,7 +156,7 @@ export default function App() {
 
   // Connection & synchronization states
   const isOnline = useOnlineStatus();
-  const { syncStatus, statusMessage, triggerSync } = useSync(user?.ownerId, [
+  const { syncStatus, statusMessage, triggerSync } = useSync(user?.isDemo ? undefined : user?.ownerId, [
     'leads',
     'empresas',
     'clientes',
@@ -447,7 +462,31 @@ export default function App() {
 
   // Real-time Database Collection Subscriptions
   useEffect(() => {
-    if (!user || !user.ownerId) return;
+    if (!user) return;
+
+    if (user.isDemo) {
+      setLeads(mockLeads);
+      setClientes(mockClientes);
+      setProjetos(mockProjetos);
+      setFinanceiro(mockFinanceiro);
+      setAgenda(mockAgenda);
+      setFollowUps(mockFollowUps);
+      setMembros(mockMembros);
+      setOportunidades(mockOportunidades);
+      setEmpresas(mockEmpresas);
+      setPropostas(mockPropostas);
+      setContratos(mockContratos);
+      setAnotacoes(mockAnotacoes);
+      setDocumentos(mockDocumentos);
+      setConfig({
+        companyName: 'SisteNext Demo',
+        tradingName: 'SisteNext Demo',
+        logoUrl: 'https://i.imgur.com/BewcRiJ.png'
+      });
+      return () => {};
+    }
+
+    if (!user.ownerId) return;
 
     const ownerId = user.ownerId;
 

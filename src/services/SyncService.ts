@@ -184,6 +184,7 @@ class SyncService {
 
   // Perform full bi-directional sync (push and then pull)
   async sync(ownerId?: string, collectionsList?: string[]): Promise<void> {
+    if (ownerId === 'demo-user-id') return;
     if (this.isSyncing) return;
     this.isSyncing = true;
     this.setStatus('syncing');

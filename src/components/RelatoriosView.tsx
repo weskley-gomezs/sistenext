@@ -66,7 +66,7 @@ export default function RelatoriosView({ clientes, projetos, financeiro, contrat
       exportToPDF({ title: 'RELATÓRIO FINANCEIRO', head, body, summary, customLogo: customLogo || undefined, companyName: companyName || undefined });
     } else if (reportType === 'clients') {
       const head = [['Empresa', 'Responsável', 'Telefone', 'Status', 'Tipo', 'Valor Contrato']];
-      const body = filteredData.map((c: Cliente) => {
+      const body = (filteredData as Cliente[]).map((c: Cliente) => {
         const clientContracts = contratos.filter(cont => cont.clientId === c.id);
         const activeCont = clientContracts.find(cont => cont.status === 'Assinado') || clientContracts[0];
         return [
