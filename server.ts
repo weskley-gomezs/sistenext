@@ -244,17 +244,17 @@ async function generateContentWithRetry(
   genAI: any,
   prompt: string,
   systemInstruction?: string,
-  modelsToTry: string[] = ['gemini-3.5-flash', 'gemini-2.5-flash']
+  modelsToTry: string[] = ['gemini-3.5-flash', 'gemini-2.0-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
 ): Promise<string> {
   let lastError: any = null;
 
   for (const modelName of modelsToTry) {
-    let retries = 3;
-    let delay = 1000;
+    let retries = 2;
+    let delay = 500;
 
     while (retries > 0) {
       try {
-        console.log(`[Gemini Request] Tentando gerar conteúdo com o modelo: ${modelName} (${retries} tentativas restantes)...`);
+        console.log(`[AI Info] Trying model ${modelName} (${retries} attempts left)...`);
         const modelInstance = genAI.getGenerativeModel({
           model: modelName,
           systemInstruction: systemInstruction || undefined
@@ -264,11 +264,11 @@ async function generateContentWithRetry(
         if (text) {
           return text;
         }
-        throw new Error("Resposta vazia da API do Gemini.");
+        throw new Error("Empty response from model.");
       } catch (err: any) {
         lastError = err;
         const errMsg = err.message || '';
-        console.warn(`[Gemini Request Error] Modelo ${modelName} falhou:`, errMsg);
+        console.log(`[AI Info] Model ${modelName} status:`, errMsg);
 
         // Retry on 503, 429, or general transient network/unavailable/resource errors
         if (
@@ -281,7 +281,7 @@ async function generateContentWithRetry(
         ) {
           retries--;
           if (retries > 0) {
-            console.log(`[Gemini Request] Aguardando ${delay}ms antes de tentar novamente...`);
+            console.log(`[AI Info] Waiting ${delay}ms before retrying...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             delay *= 2;
           }
@@ -293,7 +293,7 @@ async function generateContentWithRetry(
     }
   }
 
-  throw lastError || new Error("Não foi possível obter resposta de nenhum modelo do Gemini.");
+  throw lastError || new Error("All fallback models exhausted.");
 }
 
 async function asaasRequest(method: string, path: string, body?: any) {
