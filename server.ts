@@ -240,11 +240,36 @@ const getAiClient = () => {
   return new GoogleGenerativeAI(apiKey);
 };
 
+function getCleanErrorMessage(err: any): string {
+  const errMsg = err?.message || String(err || "");
+  let matched = errMsg.match(/\[(4\d\d|5\d\d)[^\]]*\]/);
+  if (matched) {
+    return `HTTP ${matched[1]}`;
+  }
+  if (errMsg.includes("Service Unavailable")) {
+    return "Service Unavailable (503)";
+  }
+  if (errMsg.includes("Quota") || errMsg.includes("quota") || errMsg.includes("429")) {
+    return "Quota Exceeded (429)";
+  }
+  if (errMsg.includes("high demand")) {
+    return "High Demand (503)";
+  }
+  return "Transient failure";
+}
+
 async function generateContentWithRetry(
   genAI: any,
   prompt: string,
   systemInstruction?: string,
-  modelsToTry: string[] = ['gemini-3.5-flash', 'gemini-2.0-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
+  modelsToTry: string[] = [
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-2.0-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-2.5-pro'
+  ]
 ): Promise<string> {
   let lastError: any = null;
 
@@ -268,9 +293,15 @@ async function generateContentWithRetry(
       } catch (err: any) {
         lastError = err;
         const errMsg = err.message || '';
-        console.log(`[AI Info] Model ${modelName} status:`, errMsg);
+        const cleanMsg = getCleanErrorMessage(err);
+        console.log(`[AI Info] Model ${modelName} status: ${cleanMsg}`);
 
-        // Retry on 503, 429, or general transient network/unavailable/resource errors
+        // If it's a hard quota limit (e.g. exceeded your current quota / 429), break immediately and try next model
+        if (errMsg.includes("quota") || errMsg.includes("Quota") || errMsg.includes("exceeded")) {
+          break;
+        }
+
+        // Retry on 503 or transient network/unavailable/resource errors
         if (
           errMsg.includes("503") || 
           errMsg.includes("429") || 
@@ -293,7 +324,7 @@ async function generateContentWithRetry(
     }
   }
 
-  throw lastError || new Error("All fallback models exhausted.");
+  throw new Error(`All fallback models exhausted. Last error: ${getCleanErrorMessage(lastError)}`);
 }
 
 async function asaasRequest(method: string, path: string, body?: any) {
@@ -351,7 +382,7 @@ app.post("/api/chat-gemini", authenticateFirebaseUser, geminiLimiter, async (req
       const text = await generateContentWithRetry(genAI, promptSanitized, systemInstructionSanitized);
       res.json({ text });
     } catch (genErr: any) {
-      console.error("[Gemini API Internal Error]:", genErr);
+      console.log("[AI Info] Fallback failed for /api/chat-gemini:", genErr.message || genErr);
       res.status(500).json({ error: `Erro na API Gemini: ${genErr.message}` });
     }
   } catch (err: any) {
@@ -377,7 +408,7 @@ app.post("/api/gemini", geminiLimiter, async (req: any, res: any) => {
       const text = await generateContentWithRetry(genAI, promptSanitized, systemInstructionSanitized);
       res.json({ text });
     } catch (genErr: any) {
-      console.error("[Gemini API Internal Error]:", genErr);
+      console.log("[AI Info] Fallback failed for /api/gemini:", genErr.message || genErr);
       res.status(500).json({ error: `Erro na API Gemini: ${genErr.message}` });
     }
   } catch (err: any) {
