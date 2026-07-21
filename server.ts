@@ -15,6 +15,9 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Enable trust proxy so express-rate-limit can accurately identify users behind the reverse proxy
+app.set("trust proxy", 1);
+
 // --- HELMET CONFIGURATION ---
 // Configured to support rendering inside Google AI Studio preview iframes securely
 app.use(helmet({
@@ -237,6 +240,62 @@ const getAiClient = () => {
   return new GoogleGenerativeAI(apiKey);
 };
 
+async function generateContentWithRetry(
+  genAI: any,
+  prompt: string,
+  systemInstruction?: string,
+  modelsToTry: string[] = ['gemini-3.5-flash', 'gemini-2.5-flash']
+): Promise<string> {
+  let lastError: any = null;
+
+  for (const modelName of modelsToTry) {
+    let retries = 3;
+    let delay = 1000;
+
+    while (retries > 0) {
+      try {
+        console.log(`[Gemini Request] Tentando gerar conteúdo com o modelo: ${modelName} (${retries} tentativas restantes)...`);
+        const modelInstance = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemInstruction || undefined
+        });
+        const result = await modelInstance.generateContent(prompt);
+        const text = result.response.text();
+        if (text) {
+          return text;
+        }
+        throw new Error("Resposta vazia da API do Gemini.");
+      } catch (err: any) {
+        lastError = err;
+        const errMsg = err.message || '';
+        console.warn(`[Gemini Request Error] Modelo ${modelName} falhou:`, errMsg);
+
+        // Retry on 503, 429, or general transient network/unavailable/resource errors
+        if (
+          errMsg.includes("503") || 
+          errMsg.includes("429") || 
+          errMsg.includes("Service Unavailable") || 
+          errMsg.includes("Resource has been exhausted") ||
+          errMsg.includes("high demand") ||
+          errMsg.includes("temporary")
+        ) {
+          retries--;
+          if (retries > 0) {
+            console.log(`[Gemini Request] Aguardando ${delay}ms antes de tentar novamente...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+          }
+        } else {
+          // Break retry loop for other error types and move to the next model fallback
+          break;
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error("Não foi possível obter resposta de nenhum modelo do Gemini.");
+}
+
 async function asaasRequest(method: string, path: string, body?: any) {
   const apiKey = process.env.ASAAS_API_KEY;
   if (!apiKey || apiKey.trim() === "" || apiKey.includes("MY_ASAAS") || apiKey.includes("YOUR_")) {
@@ -286,21 +345,10 @@ app.post("/api/chat-gemini", authenticateFirebaseUser, geminiLimiter, async (req
     }
 
     const genAI = getAiClient();
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
-      systemInstruction: systemInstructionSanitized || undefined
-    });
-
     console.log(`[Gemini Request] Iniciando geração no endpoint /api/chat-gemini...`);
 
     try {
-      const result = await model.generateContent(promptSanitized);
-      const text = result.response.text();
-      
-      if (!text) {
-        throw new Error("A API do Gemini retornou uma resposta vazia.");
-      }
-
+      const text = await generateContentWithRetry(genAI, promptSanitized, systemInstructionSanitized);
       res.json({ text });
     } catch (genErr: any) {
       console.error("[Gemini API Internal Error]:", genErr);
@@ -323,21 +371,10 @@ app.post("/api/gemini", geminiLimiter, async (req: any, res: any) => {
     }
 
     const genAI = getAiClient();
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
-      systemInstruction: systemInstructionSanitized || undefined
-    });
-
     console.log(`[Gemini Request] Iniciando geração no endpoint /api/gemini...`);
 
     try {
-      const result = await model.generateContent(promptSanitized);
-      const text = result.response.text();
-      
-      if (!text) {
-        throw new Error("A API do Gemini retornou uma resposta vazia.");
-      }
-
+      const text = await generateContentWithRetry(genAI, promptSanitized, systemInstructionSanitized);
       res.json({ text });
     } catch (genErr: any) {
       console.error("[Gemini API Internal Error]:", genErr);
