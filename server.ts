@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import cors from "cors";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -237,7 +237,14 @@ async function authenticateFirebaseUser(req: any, res: any, next: any) {
 const getAiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_GEMINI_KEY;
   if (!apiKey) throw new Error("A chave da API Gemini não está configurada (GEMINI_API_KEY ou API_GEMINI_KEY).");
-  return new GoogleGenerativeAI(apiKey);
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
 };
 
 function getCleanErrorMessage(err: any): string {
@@ -259,16 +266,13 @@ function getCleanErrorMessage(err: any): string {
 }
 
 async function generateContentWithRetry(
-  genAI: any,
+  ai: any,
   prompt: string,
   systemInstruction?: string,
   modelsToTry: string[] = [
     'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
-    'gemini-2.0-flash-lite',
-    'gemini-2.0-flash',
-    'gemini-2.5-pro'
+    'gemini-2.5-flash'
   ]
 ): Promise<string> {
   let lastError: any = null;
@@ -279,13 +283,15 @@ async function generateContentWithRetry(
 
     while (retries > 0) {
       try {
-        console.log(`[AI Info] Trying model ${modelName} (${retries} attempts left)...`);
-        const modelInstance = genAI.getGenerativeModel({
+        console.log(`[AI Info] Trying model ${modelName} with @google/genai (${retries} attempts left)...`);
+        const response = await ai.models.generateContent({
           model: modelName,
-          systemInstruction: systemInstruction || undefined
+          contents: prompt,
+          config: {
+            systemInstruction: systemInstruction || undefined,
+          }
         });
-        const result = await modelInstance.generateContent(prompt);
-        const text = result.response.text();
+        const text = response.text;
         if (text) {
           return text;
         }
