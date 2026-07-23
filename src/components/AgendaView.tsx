@@ -101,12 +101,18 @@ export default function AgendaView({
     }
   };
 
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+
   const upcomingItems = agenda
-    .filter((a) => a.status === 'Pendente' || !a.status)
+    .filter((a) => (a.status === 'Pendente' || !a.status) && a.date >= todayStr)
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
 
   const historyItems = agenda
-    .filter((a) => a.status === 'Concluído' || a.status === 'Cancelado')
+    .filter((a) => a.status === 'Concluído' || a.status === 'Cancelado' || a.date < todayStr)
     .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)); // Most recent history first
 
   const displayedItems = activeTab === 'upcoming' ? upcomingItems : historyItems;

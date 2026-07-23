@@ -150,13 +150,13 @@ export default function DashboardView({
 
   // Next reunions (Agenda events with type 'Reunião')
   const upcomingReunions = agenda
-    .filter((a) => a.type === 'Reunião')
+    .filter((a) => a.type === 'Reunião' && (a.status === 'Pendente' || !a.status) && a.date >= todayStr)
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 3);
 
   // Next follow-ups (Agenda events or custom followups with nextAction date in the future)
   const upcomingFollowups = agenda
-    .filter((a) => a.type === 'Follow-up' || a.type === 'Ligação')
+    .filter((a) => (a.type === 'Follow-up' || a.type === 'Ligação') && (a.status === 'Pendente' || !a.status) && a.date >= todayStr)
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 3);
 
