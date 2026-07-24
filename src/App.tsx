@@ -481,7 +481,7 @@ export default function App() {
       setConfig({
         companyName: 'SisteNext Demo',
         tradingName: 'SisteNext Demo',
-        logoUrl: 'https://i.imgur.com/BewcRiJ.png'
+        logoUrl: 'https://i.imgur.com/UWg31rO.png'
       });
       return () => {};
     }

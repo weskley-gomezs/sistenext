@@ -9,25 +9,25 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "https://i.imgur.com/BewcRiJ.png",
+      "src": "https://i.imgur.com/UWg31rO.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://i.imgur.com/BewcRiJ.png",
+      "src": "https://i.imgur.com/UWg31rO.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://i.imgur.com/BewcRiJ.png",
+      "src": "https://i.imgur.com/UWg31rO.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "https://i.imgur.com/BewcRiJ.png",
+      "src": "https://i.imgur.com/UWg31rO.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
