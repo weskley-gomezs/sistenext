@@ -29,7 +29,7 @@ import {
   Megaphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-const nexusErpLogo = 'https://i.imgur.com/UWg31rO.png';
+const nexusErpLogo = 'https://i.imgur.com/pnUJjsn.png';
 
 export type ActiveSection =
   | 'dashboard'
