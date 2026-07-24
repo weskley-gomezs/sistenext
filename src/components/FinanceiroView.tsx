@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, ArrowUpCircle, ArrowDownCircle, CircleDollarSign, Calendar, TrendingUp, AlertCircle, CheckCircle2, X, Trash2, BellRing, FileDown, MessageCircle, RefreshCw, Copy, ExternalLink, QrCode } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Financeiro, Cliente, ClienteAssinatura } from '../types';
+import { getLocalDateString } from '../utils/dateUtils';
 import { ConfirmModal } from './ConfirmModal';
 import { exportToPDF } from '../utils/pdfExport';
 
@@ -139,7 +140,7 @@ export default function FinanceiroView({
       date,
       clientName: clientName || undefined,
       paymentMethod,
-      paymentDate: status === 'Recebido' ? new Date().toISOString().split('T')[0] : undefined
+      paymentDate: status === 'Recebido' ? getLocalDateString() : undefined
     };
 
     try {

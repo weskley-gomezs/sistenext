@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCNPJ, formatPhone } from '../utils/masks';
+import { getLocalDateString } from '../utils/dateUtils';
 import { Cliente, Projeto, Financeiro, FollowUp, Anotacao, Documento, Proposta, Contrato } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { exportToPDF } from '../utils/pdfExport';
@@ -99,7 +100,7 @@ export default function ClientesView({
       await onUpdateFinanceiro(finId, {
         status: 'Recebido',
         paymentMethod: selectedPaymentMethod,
-        paymentDate: new Date().toISOString().split('T')[0]
+        paymentDate: getLocalDateString()
       });
       setConfirmingFinanceId(null);
     } catch (err) {
@@ -156,7 +157,7 @@ export default function ClientesView({
       entityId: selectedClient.id,
       entityName: selectedClient.companyName,
       entityType: 'client',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: getLocalDateString(),
       user: 'Arquiteto Sênior'
     };
 

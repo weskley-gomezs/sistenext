@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Proposta, Cliente, Lead, PropostaServico } from '../types';
 import { ConfirmModal } from './ConfirmModal';
+import { getLocalDateString } from '../utils/dateUtils';
 import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -261,7 +262,7 @@ export default function PropostasView({
           status: 'Pendente',
           contractType,
           paymentTerms,
-          createdAt: new Date().toISOString().split('T')[0]
+          createdAt: getLocalDateString()
         };
         await onAddProposta(payload);
       }

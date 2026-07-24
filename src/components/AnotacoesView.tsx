@@ -31,6 +31,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Anotacao } from '../types';
 import { ConfirmModal } from './ConfirmModal';
+import { getLocalDateString } from '../utils/dateUtils';
 
 interface AnotacoesViewProps {
   anotacoes: Anotacao[];
@@ -496,7 +497,7 @@ export default function AnotacoesView({
         hasDrawing,
         drawingData: finalDrawingData,
         scheduledDate: isScheduled ? scheduledDate : undefined,
-        createdAt: new Date().toISOString().split('T')[0],
+        createdAt: getLocalDateString(),
         user: currentUser?.name || currentUser?.email || 'Consultor Sênior'
       };
 
@@ -742,7 +743,7 @@ export default function AnotacoesView({
               {calendarDays.map((date, idx) => {
                 if (!date) return <div key={`empty-${idx}`} className="border-r border-b border-slate-50 dark:border-slate-900/50 bg-slate-50/30 dark:bg-slate-950/20" />;
                 
-                const dateStr = date.toISOString().split('T')[0];
+                const dateStr = getLocalDateString(date);
                 const dayNotes = anotacoes.filter(n => n.scheduledDate === dateStr);
                 const isToday = date.toDateString() === new Date().toDateString();
 
@@ -1186,7 +1187,7 @@ export default function AnotacoesView({
                         onChange={(e) => {
                           setIsScheduled(e.target.checked);
                           if (e.target.checked && !scheduledDate) {
-                            setScheduledDate(new Date().toISOString().split('T')[0]);
+                            setScheduledDate(getLocalDateString());
                           }
                         }}
                         className="rounded border-slate-300 dark:border-slate-700 text-amber-500 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer"

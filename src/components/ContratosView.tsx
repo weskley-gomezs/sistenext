@@ -6,6 +6,7 @@ import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { ConfirmModal } from './ConfirmModal';
 import jsPDF from 'jspdf';
+import { getLocalDateString } from '../utils/dateUtils';
 
 interface ContratosViewProps {
   contratos: Contrato[];
@@ -38,7 +39,7 @@ export default function ContratosView({
   const [title, setTitle] = useState('');
   const [value, setValue] = useState(0);
   const [status, setStatus] = useState<'Assinado' | 'Pendente'>('Pendente');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getLocalDateString());
   const [fileName, setFileName] = useState('');
   const [content, setContent] = useState('');
   const [contToDelete, setContToDelete] = useState<string | null>(null);
@@ -257,7 +258,7 @@ CLÁUSULA OITAVA – DO FORO
 
 E, por estarem assim justas e contratadas, as partes firmam o presente instrumento em 02 (duas) vias de igual teor e forma para um só efeito legal.
 
-Local e Data: Brasília - DF, ${formatDateLong(date || new Date().toISOString().split('T')[0])}
+Local e Data: Brasília - DF, ${formatDateLong(date || getLocalDateString())}
 `;
     setContent(template);
   };
@@ -327,7 +328,7 @@ Local e Data: Brasília - DF, ${formatDateLong(date || new Date().toISOString().
     setTitle('');
     setValue(0);
     setStatus('Pendente');
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(getLocalDateString());
     setFileName('');
     setContent('');
     setContractType('Fixo');
@@ -345,7 +346,7 @@ Local e Data: Brasília - DF, ${formatDateLong(date || new Date().toISOString().
     setTitle(cont.title);
     setValue(cont.value || 0);
     setStatus(cont.status || 'Pendente');
-    setDate(cont.date || new Date().toISOString().split('T')[0]);
+    setDate(cont.date || getLocalDateString());
     setFileName(cont.fileName || '');
     setContent(cont.content || '');
     setContractType(cont.contractType || 'Fixo');

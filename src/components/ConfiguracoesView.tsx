@@ -8,6 +8,7 @@ import { NotificationService } from '../utils/notificationService';
 import { setAppConfig, getAppConfig } from '../dbService';
 import { MembroEquipe } from '../types';
 import { ConfirmModal } from './ConfirmModal';
+import { getLocalDateString } from '../utils/dateUtils';
 
 interface ConfiguracoesViewProps {
   currentTheme: 'light' | 'dark';
@@ -316,7 +317,7 @@ export default function ConfiguracoesView({
     const dataStr = JSON.stringify(dbData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
 
-    const exportFileDefaultName = `sistenext_backup_${new Date().toISOString().split('T')[0]}.json`;
+    const exportFileDefaultName = `sistenext_backup_${getLocalDateString()}.json`;
 
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
